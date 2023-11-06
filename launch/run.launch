@@ -1,0 +1,9 @@
+<launch>
+    <rosparam file="$(find AdaCt)/config/param.yaml" command="load"/>
+<!--     <node pkg="AdaCt" type="lidar_odometry" name="lidar_odometry" output="screen"/> -->
+    
+    <node pkg="rosbag" type="play" name="player"  args="/home/wjj/dataset/2023_4_14/indoor_1m.bag" />
+
+    <node pkg="rviz" type="rviz" name="adact_rviz" args="-d $(find AdaCt)/launch/rviz.rviz" />
+
+</launch>
