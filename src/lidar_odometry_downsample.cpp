@@ -3,7 +3,8 @@
 #include "AdaCt/kdmap.hpp"
 //#include <ikd-Tree/ikd_Tree.h>
 #include "AdaCt/costfunction.hpp"
-//
+
+
 //kdMap have to put before main()
 kdMap kd_map;
 //KD_TREE<pcl::PointXYZ> ikd_tree;
@@ -56,6 +57,7 @@ public:
     ros::Publisher odo_pub;
     ros::Publisher traj_pub;
     ros::Publisher cloud_pub;
+    ros::Publisher cloud_downsample;
 
 
     // cloud
@@ -95,6 +97,7 @@ public:
         odo_pub = nh.advertise<nav_msgs::Odometry>("adact/odometry",1);
         traj_pub = nh.advertise<nav_msgs::Path>("adact/path",1);
         cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/deskew_pointcloud",1);
+        cloud_downsample = nh.advertise<sensor_msgs::PointCloud2>("adact/cloud_downsample",1);
 
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
 
@@ -126,8 +129,10 @@ public:
         curr_frame.setMotion(pre_pose);
 
         //curr_frame.downSampleOriCloud();
+        curr_frame.grid_sample();
         //下采样会导致问题
-        curr_frame.update();
+//        curr_frame.update();
+        curr_frame.updateFromDownSample();
     }
 
     void preprocess()
@@ -189,7 +194,7 @@ public:
             }
 
             std::vector<std::vector<pcl::PointXYZ, Eigen::aligned_allocator<pcl::PointXYZ>>> neighbor;
-            neighbor.resize(curr_frame.cloud_ori->size());
+            neighbor.resize(curr_frame.cloud_ori_downsample->size());
 
             for (int iter_count = 0; iter_count < iter_nums; iter_count++) {
                 //neighbor.clear();//size=0
@@ -219,7 +224,7 @@ public:
 
                 pcl::PointCloud<PointXYZIRT>::Ptr norm_vec(new pcl::PointCloud<PointXYZIRT>());
                 std::vector<bool> HaveValidPlane;
-                int cloud_size = curr_frame.cloud_ori->size();
+                int cloud_size = curr_frame.cloud_ori_downsample->size();
                 int valid_size=0;
                 norm_vec->clear();
                 norm_vec->resize(cloud_size);
@@ -228,7 +233,7 @@ public:
                 for (int i = 0; i < cloud_size; i++) {
                     std::vector<float> pointSearchSqDis(num_neighbor);
 
-                    int pointcloud_size = curr_frame.cloud_ori->points.size();
+                    int pointcloud_size = curr_frame.cloud_ori_downsample->points.size();
                     HaveValidPlane = std::vector<bool>(pointcloud_size, false);
 
                     kd_map.searchNeighbor(curr_frame.cloud_world->points[i], neighbor[i], pointSearchSqDis);
@@ -241,8 +246,8 @@ public:
                     PointXYZIRT point_world = curr_frame.cloud_world->points[i];
 
                     // use ori or deskew?
-                    Eigen::Vector3d point_body(curr_frame.cloud_deskew->points[i].x, curr_frame.cloud_deskew->points[i].y,
-                                               curr_frame.cloud_deskew->points[i].z);
+                    Eigen::Vector3d point_body(curr_frame.cloud_ori_downsample->points[i].x, curr_frame.cloud_ori_downsample->points[i].y,
+                                               curr_frame.cloud_ori_downsample->points[i].z);
                     if (esti_plane(pabcd, neighbor[i], 0.1f)) {
                         double point2plane =
                                 pabcd(0) * point_world.x + pabcd(1) * point_world.y + pabcd(2) * point_world.z +
@@ -261,8 +266,8 @@ public:
                             double alpha = (norm_vec->points[i].timestamp - curr_frame.timeStart) /
                                            (curr_frame.timeEnd - curr_frame.timeStart);
 
-                            V3D raw_point(curr_frame.cloud_ori->points[i].x, curr_frame.cloud_ori->points[i].y,
-                                          curr_frame.cloud_ori->points[i].z);
+                            V3D raw_point(curr_frame.cloud_ori_downsample->points[i].x, curr_frame.cloud_ori_downsample->points[i].y,
+                                          curr_frame.cloud_ori_downsample->points[i].z);
 
                             double weight = 1.0;
                             // add residualblock
@@ -324,8 +329,8 @@ public:
                 curr_frame.setMotion(begin_quat, end_quat, begin_trans, end_trans);
                 curr_frame.normalize();
 
-                curr_frame.update();
-
+                //curr_frame.update();
+                curr_frame.updateFromDownSample();
                 if(curr_frame.pose.compareDiff(pre_pose)) {
                     pre_pose = curr_frame.pose;
                     break;
@@ -337,7 +342,6 @@ public:
             }
 
             // update local kd_map
-            sleep(5);
             kd_map.updateLocalMap(curr_frame, neighbor);
             //updateLocalMap(curr_frame,neighbor);
             ROS_INFO("kd_map size:%d",kd_map.local_ikdtree.size());
@@ -368,6 +372,24 @@ public:
         pcl::toROSMsg(*globalMap, globalMapRos);
         globalMapRos.header.stamp = ros::Time(headertime);
         globalMapRos.header.frame_id = "map";
+
+
+        sensor_msgs::PointCloud2 downsample_cloud;
+        pcl::toROSMsg(*curr_frame.cloud_ori_downsample,downsample_cloud);
+        downsample_cloud.header.stamp = ros::Time(headertime);
+        downsample_cloud.header.frame_id= "map";//for debug
+
+        geometry_msgs::PoseStamped geo_odometry_pose;
+        geo_odometry_pose.header = odometry_pose.header;
+        geo_odometry_pose.pose = odometry_pose.pose.pose;
+
+        globalPath.header.stamp = ros::Time(headertime);
+        globalPath.header.frame_id = "map";
+        globalPath.poses.push_back(geo_odometry_pose);
+        traj_pub.publish(globalPath);
+
+        cloud_downsample.publish(downsample_cloud);
+
         odo_pub.publish(odometry_pose);
 
         map_pub.publish(globalMapRos);

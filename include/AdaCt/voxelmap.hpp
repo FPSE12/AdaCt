@@ -1,70 +1,125 @@
 #pragma once 
 
-#include <vector>
-#include <queue>
-
-#include <tsl/robin_map.h>
-
+#include "tsl/robin_map.h"
+#include <glog/logging.h>
+#include "AdaCt/types.h"
 
 
 
-struct Voxel{
-public:
-    int x=-1,y=-1,z=-1;
-    Voxel() =default;
-//    Voxel(){
-//        x=y=z=-1;
-//    }
 
-    Voxel(int x_,int y_,int z_){
-        x=x_;
-        y=y_;
-        z=z_;
-    }
+template<class PointT>
+ class Voxelmap{
+ public:
+     Voxelmap(){
+         voxel_size=0.5;
+         max_voxel_block_size=20;
 
-    inline bool operator ==(const Voxel &other) const{
-        return other.x==x && other.y==y && other.z==z;
-    }
+         num_points=0;
+     }
 
-    inline bool operator != (const Voxel &other) const{
-        return !(*this == other);
-    }
+     Voxel InsertPoint(const Eigen::Vector3d &Wpoint){
+         Voxel voxel=Voxel::Coordinates(Wpoint,voxel_size);
 
-    inline bool operator <(const Voxel &other) const{
-        return x<other.x || (x==other.x && (y<other.y || (y==other.y && z<other.z)));
-    }
+         if(map.find(voxel)==map.end()){
+             map[voxel].points.reserve(max_voxel_block_size);
+             map[voxel].points.push_back(Wpoint);
+             num_points++;
+             return voxel;
 
-    template<typename point3D>
-    static Voxel Coordinates(const point3D point,double voxel_size){
-        Voxel voxel;
-        voxel.x=int(point(0)/voxel_size);
-        voxel.y=int(point(1)/voxel_size);
-        voxel.z=int(point(2)/voxel_size);
-        return voxel;
-    }
-};
+         }
 
-//VoxelBlock is the voxel 
-class VoxelBlock{
+         auto &voxelBlock = map[voxel];
 
-};
+         if(voxelBlock.numPoints()<max_voxel_block_size){
+             double min_dis = std::numeric_limits<double>::max();
+             for(int i=0;i<voxelBlock.numPoints();i++){
+                 auto & _point=voxelBlock.points[i];
+                 double sq_dis = (_point-Wpoint).norm();
+                 if(sq_dis<min_dis){
+                     min_dis=sq_dis;
+                 }
 
-// class Voxelmap{
-// public:
-//     Voxelmap(){
-//         voxel_size=0.5;
-//     }
+             }
+             if(min_dis<min_distance_between_points){
+                 voxelBlock.points.push_back(Wpoint);//not used the addpoint function for not defination the num_points in VoxelBlcok
+                 return voxel;
+             }
+         }
+     }
 
-// private:
-//     double voxel_size;
-//     int max_voxel_block_size;
-//     double min_diatance_between_points;
+     void InsertPointCloud(const pcl::PointCloud<PointT> * worldCloud, std::vector<size_t>& out_indices){
+         for(auto point : worldCloud->points ){
+             Eigen::Vector3d Wpoint(point.x, point.y, point.z);
+             InsertPoint(Wpoint);
+         }
+         return;
+     }
 
-//     double search_max_radius;
-//     int search_voxel_radius;
 
-//     tsl::robin_map<Voxel, VoxelBlock> map;
+     bool NeighborSearch(const PointT & PointW,double searchThreshold, int max_num_beighbor, Neighbors_queue & neighborsQueue){
+//            neighbors.reserve(max_num_beighbor);
+//            SearchDis.reserve(max_num_beighbor);
+
+            Eigen::Vector3d PointW_(PointW.x, PointW.y,PointW.z);
+            Voxel voxel = Voxel::Coordinates(PointW_,voxel_size);
+            int kx=voxel.x;
+            int ky=voxel.y;
+            int kz=voxel.z;
+
+            //Neighbors_queue neighborsQueue;
+            for(int kxx=kx-1;kxx<kx+1+1;kxx++){
+                for(int kyy=ky-1;kyy<ky+1+1;kyy++){
+                    for(int kzz=kz-1;kzz<kz+1+1;kzz++){
+                        voxel.x=kxx;
+                        voxel.y=kyy;
+                        voxel.z=kzz;
+
+                        auto search = map.find(voxel);
+                        if(search != map.end()){
+                            auto voxel_block = search.value();
+                            for(int i=0;i<voxel_block.points.size();i++){
+                                Eigen::Vector3d neighbor=voxel_block.points[i];
+                                double dis=(PointW_-neighbor).norm();
+                                if(dis<searchThreshold){
+                                    if(neighborsQueue.size()==max_num_beighbor){
+                                        if(dis<std::get<0>(neighborsQueue.top())){
+                                            neighborsQueue.pop();
+                                            neighborsQueue.emplace(dis,neighbor,voxel);
+                                        }
+                                    }else{
+                                        neighborsQueue.emplace(dis,neighbor,voxel);
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+
+            if(neighborsQueue.size()<max_num_beighbor){//estiplane?
+                return false;
+            }
+            return true;
+     }
+
+
+     ~Voxelmap()=default;
+
+ private:
+     //voxel point
+     double voxel_size;
+     int max_voxel_block_size;
+     double min_distance_between_points;
+
+     double search_max_radius;
+     int search_voxel_radius;
+
+     int num_points;
+
+     tsl::robin_map<Voxel, VoxelBlock> map;
+
 
     
 
-// };
+ };

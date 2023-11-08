@@ -2,8 +2,8 @@
     <rosparam file="$(find AdaCt)/config/param.yaml" command="load"/>
 <!--     <node pkg="AdaCt" type="lidar_odometry" name="lidar_odometry" output="screen"/> -->
     
-    <node pkg="rosbag" type="play" name="player"  args="/home/wjj/dataset/2023_4_14/indoor_1m.bag" />
-
+    <node pkg="rosbag" type="play" name="player"  args="/media/wjj/T7/jueying/jiulonghu/917/04.bag" />
+    <node pkg="AdaCt" type="Transform" name="Transform" output="screen"/>
     <node pkg="rviz" type="rviz" name="adact_rviz" args="-d $(find AdaCt)/launch/rviz.rviz" />
 
 </launch>

@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   sensor_msgs
+        tf
 )
 
 ## System dependencies are found with CMake's conventions
@@ -131,7 +132,6 @@ include_directories(
   ${Sophus_INCLUDE_DIRS}
   ${Eigen3_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
-  ikd-Tree
 )
 
 ## Declare a C++ library
@@ -169,6 +169,30 @@ target_link_libraries(lidar_odometry
         tsl::robin_map
 )
 
+add_executable(lidar_odometry_new src/lidar_odometry_new.cpp include/ikd-Tree/ikd_Tree.cpp)
+target_link_libraries(lidar_odometry_new
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        )
+
+add_executable(lidar_odometry_downsample src/lidar_odometry_downsample.cpp include/ikd-Tree/ikd_Tree.cpp)
+target_link_libraries(lidar_odometry_downsample
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        )
+
+add_executable(Transform src/Transform.cpp)
+target_link_libraries(Transform
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES})
 #############
 ## Install ##
 #############

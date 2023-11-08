@@ -3,7 +3,9 @@
 #include "AdaCt/utility.h"
 #include "AdaCt/optPose.hpp"
 #include "AdaCt/voxelmap.hpp"
-#include <unordered_map>
+
+
+
 
 class frame_info
 {
@@ -22,12 +24,16 @@ public:
     std::vector<double> timeVec;
     // pcl::VoxelGrid<PointType> downSamplefliter;
     double  downsampleLeafsize;
-    
+    double voxelSize;
+    double blind;
 
 public:
 
     frame_info(){
-        downsampleLeafsize=0.4;
+        downsampleLeafsize=0.2;
+        voxelSize = 0.2;
+        blind=0.2;
+
         pose.initialMotion();
 
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
@@ -94,12 +100,29 @@ public:
 //
 //    }
 
-//    void grid_sample(){
-//        tsl::robin_map<Voxel, PointXYZIRT> grid;
-//        grid.reserve(size_t(cloud_ori->size()));
-//
-//
-//    }
+    void grid_sample(){
+        tsl::robin_map<Voxel, PointXYZIRT> grid;
+        grid.reserve(size_t(cloud_ori->size()));
+        Voxel voxel;
+        int blind_voxel=ceil(blind/voxelSize);
+        for(int i=0;i<cloud_ori->size();i++){
+            voxel.x = static_cast<short>(cloud_ori->points[i].x / voxelSize);
+            voxel.y = static_cast<short>(cloud_ori->points[i].y / voxelSize);
+            voxel.z = static_cast<short>(cloud_ori->points[i].z / voxelSize);
+            if(voxel.x<blind_voxel && voxel.y<blind_voxel && voxel.z<blind_voxel){
+                continue;
+            }
+            if(grid.find(voxel)==grid.end()){
+                grid[voxel]=cloud_ori->points[i];
+            }
+        }
+        cloud_ori_downsample->clear();
+        cloud_ori_downsample->reserve(grid.size());
+        for(const auto &[_,point] : grid){
+            cloud_ori_downsample->points.push_back(point);
+        }
+
+    }
    
     //use opt_pose to change cloud_ori to cloud_deskew
     void Distortion(){
@@ -174,6 +197,35 @@ public:
         return;
     }
 
+    void updateFromDownSample(){
+        cloud_world->clear();
+        cloud_world->resize(cloud_ori_downsample->size());
+        cloud_deskew->clear();
+        cloud_deskew->resize(cloud_ori_downsample->size());
+        for(int i=0;i<cloud_ori_downsample->size();i++){
+            PointXYZIRT temp=cloud_ori_downsample->points[i];
+            double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_world * temp_P;
+
+            temp.x=temp_P[0];
+            temp.y=temp_P[1];
+            temp.z=temp_P[2];
+
+            //千万不能用push_back，会在size的基础上进行增加
+            cloud_world->points[i]=temp;
+
+            temp_P = pose.end_pose.inverse() * temp_P;
+
+            temp.x=temp_P[0];
+            temp.y=temp_P[1];
+            temp.z=temp_P[2];
+
+            cloud_deskew->points[i]=temp;
+        }
+        return;
+    }
     void Reset(){
 
         headertime=timeStart=timeEnd=0;
