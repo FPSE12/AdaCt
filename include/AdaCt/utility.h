@@ -19,7 +19,7 @@
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 
-#include "types.h"
+#include "types.hpp"
 
 using namespace std;
 
