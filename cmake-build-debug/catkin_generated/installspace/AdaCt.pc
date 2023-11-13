@@ -1,0 +1,8 @@
+prefix=/usr/local
+
+Name: AdaCt
+Description: Description of AdaCt
+Version: 0.0.0
+Cflags: -I${prefix}/include
+Libs: -L${prefix}/lib 
+Requires: geometry_msgs nav_msgs roscpp rospy std_msgs sensor_msgs

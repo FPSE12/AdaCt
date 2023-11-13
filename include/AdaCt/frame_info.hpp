@@ -2,7 +2,7 @@
 
 #include "AdaCt/utility.h"
 #include "AdaCt/optPose.hpp"
-#include "AdaCt/voxelmap.hpp"
+#include "voxelmap/voxelmap.hpp"
 
 
 
@@ -31,7 +31,7 @@ public:
 
     frame_info(){
         downsampleLeafsize=0.2;
-        voxelSize = 0.2;
+        voxelSize = 0.8;
         blind=0.2;
 
         pose.initialMotion();
@@ -100,7 +100,41 @@ public:
 //
 //    }
 
-     //new version
+     //new version，，cannot_used
+     void grid_sample_timeMid(){
+         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
+         grid.reserve(size_t(cloud_ori->size()));
+         Voxel voxel;
+         //int blind_voxel=ceil(blind/voxelSize);
+         for(int i=0;i<cloud_ori->size();i++){
+             PointXYZIRT rawP = cloud_ori->points[i];
+             Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
+             double timestamp = cloud_ori->points[i].timestamp;
+             double dis = raw_point.norm();
+             voxel.x = static_cast<short>(cloud_ori->points[i].x / voxelSize);
+             voxel.y = static_cast<short>(cloud_ori->points[i].y / voxelSize);
+             voxel.z = static_cast<short>(cloud_ori->points[i].z / voxelSize);
+             if(dis< blind || !std::isfinite(raw_point(0))|| !std::isfinite(raw_point(1)) || !std::isfinite(raw_point(2))){
+                 continue;
+             }
+             if(grid.find(voxel)==grid.end()){
+                 grid[voxel].addPoint(rawP);
+             }else{
+                 grid[voxel].addPoint(rawP);
+             }
+         }
+         cloud_ori_downsample->clear();
+         cloud_ori_downsample->reserve(grid.size());
+         for(const auto &[_,voxel_block] : grid){
+             //cloud_ori_downsample->points.push_back(point);
+
+             PointXYZIRT midP = voxel_block.points[voxel_block.numPoints()/2];//use the const? cannot change the var in object(const auto used in above)
+
+             cloud_ori_downsample->points.push_back(midP);
+         }
+
+     }
+
     void grid_sample_mid(){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
         grid.reserve(size_t(cloud_ori->size()));
@@ -167,18 +201,18 @@ public:
             PointXYZIRT temp=cloud_ori->points[i];
             //ROS_INFO("%f, %f,%f", cloud_ori->points[i].timestamp, timeStart, timeEnd);
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
-
-            POSE inter_pose=pose.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
-            temp_P = inter_pose.first * temp_P + inter_pose.second;
-
-            temp_P = pose.end_pose.inverse() * temp_P;
+//
+//            POSE inter_pose=pose.linearInplote(alpha);
+//            V3D temp_P(temp.x,temp.y,temp.z);
+//            temp_P = inter_pose.first * temp_P + inter_pose.second;
+//
+//            temp_P = pose.end_pose.inverse() * temp_P;
 
 //            --------------------SE3----------
-//            SE3 temp_T_world=pose.linearInplote(alpha);
-//            SE3 temp_T_end = pose.end_pose.inverse() * temp_T_world;
-//            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P=temp_T_end * temp_P;//to the end
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            SE3 temp_T_end = pose.end_pose.inverse() * temp_T_world;
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_end * temp_P;//to the end
 //
             temp.x=temp_P[0];
             temp.y=temp_P[1];
@@ -196,15 +230,15 @@ public:
             PointXYZIRT temp=cloud_ori->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
-            POSE inter_pose=pose.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
-            temp_P = inter_pose.first * temp_P + inter_pose.second;
+//            POSE inter_pose=pose.linearInplote(alpha);
+//            V3D temp_P(temp.x,temp.y,temp.z);
+//            temp_P = inter_pose.first * temp_P + inter_pose.second;
 
 
 //            ---------------------SE3---------------------------
-//            SE3 temp_T_world=pose.linearInplote(alpha);
-//            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P=temp_T_world * temp_P;
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_world * temp_P;
 //
             temp.x=temp_P[0];
             temp.y=temp_P[1];
@@ -225,14 +259,14 @@ public:
             PointXYZIRT temp=cloud_ori->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
-            POSE inter_pose=pose.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
-            temp_P = inter_pose.first * temp_P + inter_pose.second;
+//            POSE inter_pose=pose.linearInplote(alpha);
+//            V3D temp_P(temp.x,temp.y,temp.z);
+//            temp_P = inter_pose.first * temp_P + inter_pose.second;
 
 //            ----------------SE3-----------------
-//            SE3 temp_T_world=pose.linearInplote(alpha);
-//            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P=temp_T_world * temp_P;
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_world * temp_P;
 //
             temp.x=temp_P[0];
             temp.y=temp_P[1];
@@ -261,29 +295,10 @@ public:
             PointXYZIRT temp=cloud_ori_downsample->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
-            POSE inter_pose=pose.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
-            temp_P = inter_pose.first * temp_P + inter_pose.second;
-
-
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            //千万不能用push_back，会在size的基础上进行增加
-            cloud_world->points[i]=temp;
-//
-            temp_P = pose.end_pose.inverse() * temp_P;
-//
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            cloud_deskew->points[i]=temp;
-
-//            SE3 temp_T_world=pose.linearInplote(alpha);
+//            POSE inter_pose=pose.linearInplote(alpha);
 //            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P=temp_T_world * temp_P;
+//            temp_P = inter_pose.first * temp_P + inter_pose.second;
+//
 //
 //            temp.x=temp_P[0];
 //            temp.y=temp_P[1];
@@ -291,14 +306,33 @@ public:
 //
 //            //千万不能用push_back，会在size的基础上进行增加
 //            cloud_world->points[i]=temp;
-//
+////
 //            temp_P = pose.end_pose.inverse() * temp_P;
-//
+////
 //            temp.x=temp_P[0];
 //            temp.y=temp_P[1];
 //            temp.z=temp_P[2];
 //
 //            cloud_deskew->points[i]=temp;
+
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_world * temp_P;
+
+            temp.x=temp_P[0];
+            temp.y=temp_P[1];
+            temp.z=temp_P[2];
+
+            //千万不能用push_back，会在size的基础上进行增加
+            cloud_world->points[i]=temp;
+
+            temp_P = pose.end_pose.inverse() * temp_P;
+
+            temp.x=temp_P[0];
+            temp.y=temp_P[1];
+            temp.z=temp_P[2];
+
+            cloud_deskew->points[i]=temp;
         }
         return;
     }

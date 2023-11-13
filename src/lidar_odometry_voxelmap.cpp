@@ -4,7 +4,7 @@
 //#include <ikd-Tree/ikd_Tree.h>
 #include "AdaCt/costfunction.hpp"
 
-#include "AdaCt/voxelmap.hpp"
+#include "voxelmap/voxelmap.hpp"
 //
 //kdMap have to put before main()
 
@@ -28,6 +28,7 @@ public:
     ros::Publisher cloud_pub;
     ros::Publisher cloud_ori_pub;
     ros::Publisher cloud_valid_pub;
+    ros::Publisher cloud_world_pub;
 
 
     // cloud
@@ -56,7 +57,9 @@ public:
     // map
     Voxelmap<PointXYZIRT> local_map;
     // opt pose
-    OptPose pre_pose, curr_pose;
+//    OptPose pre_pose, curr_pose;
+
+    std::vector<OptPose> poses;
     int iter_nums; // 5
 
     Lidar_preprocess()
@@ -69,20 +72,21 @@ public:
         cloud_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/deskew_pointcloud",1);
         cloud_ori_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/ori_pointcloud",1);
         cloud_valid_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/valid_points",1);
+        cloud_world_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/world_points",1);
 
 
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
         cloud_valid.reset(new pcl::PointCloud<PointXYZIRT>());
 
         first_flag = true;
-        frame_count = 0;
+        frame_count =-1;
 
         iter_nums =5;
 
         rosCloudQue.clear();
 
-        pre_pose.initialMotion();
-        curr_pose.initialMotion();
+//        pre_pose.initialMotion();
+//        curr_pose.initialMotion();
 
         globalMap.reset(new pcl::PointCloud<PointXYZIRT>());
 
@@ -100,11 +104,28 @@ public:
 
         curr_frame.setFrameTime(headertime, timeStart, timeEnd, frame_count);
         curr_frame.setOricloud(cloud_ori);
-        curr_frame.setMotion(pre_pose);
+        if(frame_count<=1){
+            curr_frame.pose.initialMotion();
+            //poses.push_back(curr_frame.pose);
+        }else{
+
+//            curr_frame.pose.begin_pose = poses[frame_count].begin_pose *(poses[frame_count-1].begin_pose.inverse() * poses[frame_count].begin_pose);
+//            curr_frame.pose.end_pose = poses[frame_count].end_pose * (poses[frame_count-1].end_pose.inverse() * poses[frame_count].end_pose);
+            curr_frame.pose.begin_pose = poses.back().end_pose;
+            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+        }
+
+//        curr_frame.pose.begin_pose = poses.back().end_pose;
+//        //curr_frame.pose.end_pose = poses[frame_count-1].end_pose * poses[frame_count-2].end_pose.inverse() * poses[frame_count-1].end_pose;
+//        curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+//        curr_frame.pose=poses.back();
+
 
         //curr_frame.downSampleOriCloud();
         //下采样会导致问题
-        curr_frame.update();
+        curr_frame.grid_sample_mid();
+        //curr_frame.update();
+        curr_frame.updateFromDownSample();
     }
 
     void preprocess()
@@ -117,9 +138,9 @@ public:
             {
                 continue;
             }
-            ROS_INFO("frame_id:%d",frame_count);
-            frame_count++;
 
+            frame_count++;
+            ROS_INFO("frame_id:%d",frame_count);
             // get pcl cloud
             cloud_ori_ros = std::move(rosCloudQue.front());
             rosCloudQue.pop_front();
@@ -146,8 +167,10 @@ public:
 
                 curr_frame.setFrameTime(headertime, timeStart, timeEnd, frame_count);
                 curr_frame.setOricloud(cloud_ori);
+                curr_frame.pose.initialMotion();
 
-                local_map.InsertPointCloud(curr_frame.cloud_ori);
+                local_map.InsertPointCloud(curr_frame.cloud_ori,curr_frame.pose);
+                poses.push_back(curr_frame.pose);
 
                 first_flag = false;
 
@@ -175,15 +198,28 @@ public:
                 ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
                 ceres::Problem problem;
 
-                Eigen::Quaterniond  begin_quat = curr_frame.beginQuat().normalized();
-                Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans().normalized();
+                Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
+                Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans();
                 Eigen::Quaterniond end_quat = curr_frame.endQaut();
                 Eigen::Vector3d end_trans = curr_frame.getEndTrans();
 
+                double *begin_quat_param = curr_frame.beginQuat().coeffs().data();
+                double *end_quat_param = curr_frame.endQaut().coeffs().data();
+                double *begin_trans_param = curr_frame.getBeginTrans().data();
+                double *end_trans_param = curr_frame.getEndTrans().data();
 
-                problem.AddParameterBlock(begin_quat.coeffs().data(),4, new ceres::EigenQuaternionManifold());
-                problem.AddParameterBlock(end_quat.coeffs().data(), 4, new ceres::EigenQuaternionManifold());
+//                problem.AddParameterBlock(begin_quat.coeffs().data(),4);
+//                problem.SetManifold(begin_quat.coeffs().data(), new ceres::EigenQuaternionManifold);
+//
+//                problem.AddParameterBlock(end_quat.coeffs().data(), 4);
+//                problem.SetManifold(end_quat.coeffs().data(),new ceres::EigenQuaternionManifold);
+
+
+                problem.AddParameterBlock(begin_quat.coeffs().data(),4, new ceres::EigenQuaternionParameterization());
+                problem.AddParameterBlock(end_quat.coeffs().data(),4, new ceres::EigenQuaternionParameterization());
+
                 problem.AddParameterBlock(begin_trans.data(), 3);
+
                 problem.AddParameterBlock(end_trans.data(), 3);
 
                 // add parameterblock
@@ -194,34 +230,52 @@ public:
                 // problem.AddParameterBlock(end_pose.data(), Sophus::SE3d::num_parameters, new LocalParameterizationSE3);
 
 
-                int cloud_size = curr_frame.cloud_ori->size();
+                int cloud_size = curr_frame.cloud_ori_downsample->size();
 
                 auto findNeighbor_start = std::chrono::steady_clock::now();
                 int opt_num=0;
                 cloud_valid->clear();
+
+
                 for (int i = 0; i < cloud_size; i++) {
 
 
-                    Neighbors_queue neighborsQueue;
+                    //Neighbors_queue neighborsQueue;
+                    VoxelBlock<PointXYZIRT> neighbor;
 
                     double searchDis = 0.8;
 
                     Eigen::Vector4d pabcd;
-                    if(local_map.NeighborSearch(curr_frame.cloud_world->points[i],searchDis,neighborsQueue,pabcd)){
+
+                    double alpha = (curr_frame.cloud_ori_downsample->points[i].timestamp - curr_frame.timeStart)/( curr_frame.timeEnd- curr_frame.timeStart);
+                    Eigen::Vector3d raw_point(curr_frame.cloud_ori_downsample->points[i].x,curr_frame.cloud_ori_downsample->points[i].y,curr_frame.cloud_ori_downsample->points[i].z);
+
+
+                    Eigen::Vector3d sensor_local= (1-alpha)* begin_trans + alpha * end_trans;
+
+//                    Eigen::Quaterniond inter_qual = begin_quat.normalized().slerp(alpha, end_quat.normalized());
+//
+//                    Eigen::Vector3d world_points = inter_qual * raw_point + sensor_local;
+
+                    if(local_map.NeighborSearch(curr_frame.cloud_world->points[i],sensor_local,searchDis,neighbor,pabcd)){
                         opt_num++;
-                        double alpha = (curr_frame.cloud_ori->points[i].timestamp - curr_frame.timeStart)/( curr_frame.timeEnd- curr_frame.timeStart);
-                        Eigen::Vector3d raw_point(curr_frame.cloud_ori->points[i].x,curr_frame.cloud_ori->points[i].y,curr_frame.cloud_ori->points[i].z);
-                        double weight=1.0;
-                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
-                                new CTFunctor(alpha, raw_point, pabcd, weight));
+
+                        neighbor.computeDescription(A2D | NORMAL);
+//                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
+//                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
+                        double weight =neighbor.description.a2D;
+//                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
+//                                new CTFunctor(alpha, raw_point, pabcd, weight));
+                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
+                                new CTFunctor2(alpha, raw_point, getPointXYZ(neighbor.points[0]), weight,neighbor.description.normal));
 
                         problem.AddResidualBlock(cost_function,
-                                                 loss_function,
-                                                 begin_quat.coeffs().data(), end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-                        cloud_valid->push_back(curr_frame.cloud_ori->points[i]);
+                                                 nullptr,
+                                                 begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+                        cloud_valid->push_back(curr_frame.cloud_ori_downsample->points[i]);
                     }
-
                 }
+
 
                 publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");
                 auto findNeighbor_end = std::chrono::steady_clock::now();
@@ -230,12 +284,23 @@ public:
                     ROS_INFO("cloud find neighbor COST: %f ms",
                              std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
                 }
+                //add other constraints
+                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,3,3>(
+                        new LocationConsistency(poses.back().endTrans(),std::sqrt(opt_num*0.001))),
+                                         nullptr,
+                                         begin_trans.data()
 
+                        );
+                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocity,3,3,3>(
+                        new ConstantVelocity(poses.back().endTrans()-poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
+                        nullptr,
+                        begin_trans.data(),end_trans.data()
+                        );
                 // solve
                 ceres::Solver::Options option;
                 option.linear_solver_type = ceres::DENSE_QR;
-                option.max_num_iterations = 4;
-                option.num_threads = 12;
+                option.max_num_iterations =4;
+                option.num_threads = 16;
                 option.trust_region_strategy_type = ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
 
                 ceres::Solver::Summary summary;
@@ -250,32 +315,36 @@ public:
 //                    std::cout<<begin_trans<<"&&"<<end_trans<<endl;
                 }
 
+                begin_quat.normalize();
+                end_quat.normalize();
+                curr_frame.setMotion(begin_quat, end_quat, begin_trans, end_trans);
+                curr_frame.updateFromDownSample();
+                //curr_frame.normalize();
 
-                curr_frame.setMotion(begin_quat.normalized(), end_quat.normalized(), begin_trans, end_trans);
-                curr_frame.normalize();
+                //curr_frame.update();
 
-                curr_frame.update();
 
-//                if(curr_frame.pose.compareDiff(pre_pose)) {
-//                    pre_pose = curr_frame.pose;
-//                    break;
-//                }
+                if(curr_frame.pose.compareDiff(poses.back())) {
+                    poses.push_back(curr_frame.pose);
+                    break;
+                }
 
-                pre_pose = curr_frame.pose;
+
 
 
             }
-            EulerAngles end_euler = ToEulerAngles(pre_pose.endQuat());
-            ROS_INFO("ruler: %f, %f,%f", end_euler.roll, end_euler.pitch, end_euler.yaw);
+//            EulerAngles end_euler = ToEulerAngles(pre_pose.endQuat());
+//            ROS_INFO("ruler: %f, %f,%f", end_euler.roll, end_euler.pitch, end_euler.yaw);
 
             // update local_map
             auto map_start = std::chrono::steady_clock::now();
             local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
-            local_map.InsertPointCloud(curr_frame.cloud_world);
+            local_map.InsertPointCloud(curr_frame.cloud_world,curr_frame.pose);
+            poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();
             ROS_INFO("MAP UPDATE COST: %f ms",std::chrono::duration<double,std::milli>(map_end-map_start).count());
             //updateLocalMap(curr_frame,neighbor);
-            ROS_INFO("MAP SIZE: %d", local_map.size());
+//            ROS_INFO("MAP SIZE: %d", local_map.size());
             *globalMap += *curr_frame.cloud_world;
 
             // publish map
@@ -327,6 +396,12 @@ public:
         deskew_cloud.header.stamp = ros::Time(headertime);
         deskew_cloud.header.frame_id= "odometry";
 
+        sensor_msgs::PointCloud2 world_cloud;
+        pcl::toROSMsg(*curr_frame.cloud_world,world_cloud);
+        world_cloud.header.stamp = ros::Time(headertime);
+        world_cloud.header.frame_id="map";
+
+
         sensor_msgs::PointCloud2 ori_cloud;
         pcl::toROSMsg(*curr_frame.cloud_ori,ori_cloud);
         ori_cloud.header.stamp = ros::Time(headertime);
@@ -334,6 +409,7 @@ public:
 
         cloud_ori_pub.publish(ori_cloud);
         cloud_pub.publish(deskew_cloud);
+        cloud_world_pub.publish(world_cloud);
 
         traj_pub.publish(globalPath);
 

@@ -31,158 +31,6 @@ struct PointXYZIRT
 POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIRT,
                                   (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint16_t, ring, ring)(double, timestamp, timestamp))
 
-//-----------------------------Voxel-----------------------------------------
-struct Voxel{
-    Voxel() =default;
-//    Voxel(){
-//        x=y=z=-1;
-//    }
-
-    Voxel(int x_,int y_,int z_){
-        x=x_;
-        y=y_;
-        z=z_;
-    }
-    int x=-1,y=-1,z=-1;
-    inline bool operator ==(const Voxel &other) const{
-        return other.x==x && other.y==y && other.z==z;
-    }
-
-    inline bool operator != (const Voxel &other) const{
-        return !(*this == other);
-    }
-
-    inline bool operator <(const Voxel &other) const{
-        return x<other.x || (x==other.x && (y<other.y || (y==other.y && z<other.z)));
-    }
-
-
-    static Voxel Coordinates(const Eigen::Vector3d point,double voxel_size){
-        Voxel voxel;
-        voxel.x=int(point(0)/voxel_size);
-        voxel.y=int(point(1)/voxel_size);
-        voxel.z=int(point(2)/voxel_size);
-        return voxel;
-    }
-};
-
-namespace std {
-    template<>
-    struct hash<Voxel> {
-        std::size_t operator()(const Voxel &vox) const {
-            // const std::hash<int32_t> hasher;
-            const size_t kP1 = 73856093;//???
-            const size_t kP2 = 19349669;
-            const size_t kP3 = 83492791;
-
-            // return ((hasher(vox.x) ^ (hasher(vox.y) << 1)) >> 1) ^ (hasher(vox.z) << 1) >> 1;
-            return vox.x * kP1 + vox.y * kP2 + vox.z * kP3;
-        }
-    };
-}
-
-//VoxelBlock is the voxel
-
-template<typename T>
-double PointDis(T p1, T p2){
-    return (p1.x-p2.x)*(p1.x-p2.x)+(p1.y-p2.y)*(p1.y-p2.y)+(p1.z-p2.z)*(p1.z-p2.z);
-}
-
-template<class PointT>
-struct VoxelBlock{
-    explicit VoxelBlock(int num_points=20):num_points_(num_points){
-        points.reserve(num_points);
-       // timestamps.reserve(num_points);
-        mid_point.x=0;
-        mid_point.y=0;
-        mid_point.z=0;
-    }
-
-    std::vector<PointT> points;
-    //std::vector<double> timestamps;
-
-    void calculateMid(PointT newP){
-        mid_point.x = (mid_point.x * points.size()+newP.x)/(points.size()+1);
-        mid_point.y = (mid_point.y * points.size()+newP.y)/(points.size()+1);
-        mid_point.z = (mid_point.z * points.size()+newP.z)/(points.size()+1);
-    }
-
-    bool isFull() const {return num_points_ == points.size();}
-    //bool legal() const {return points.size() == timestamps.size()};
-    void addPoint(const PointT &point){
-        if(points.size()>=num_points_){
-            //ROS_INFO("full!");
-            //return;
-            //vec : double
-            num_points_=num_points_+num_points_;
-
-        }
-        //mid_point = (mid_point * points.size() + point)/(points.size()+1);
-        calculateMid(point);
-        points.push_back(point);
-//        if( !legal()) {
-//            ROS_ERROR("VOXEL BLOCK INSERT ERROR!");
-//        }
-        return;
-    }
-
-//    void addPoint(const Eigen::Vector3d &point, const double &timestamp){
-//        if(point.size()>=num_points_){
-//            //ROS_INFO("full!");
-//            //return;
-//            //vec : double
-//            num_points_=num_points_+num_points_;
-//
-//
-//        }
-//        mid_point = (mid_point * points.size() + point)/(points.size()+1);
-//        points.push_back(point);
-//        //timestamps.push_back(timestamp);
-//
-////        if( !legal()) {
-////            ROS_ERROR("VOXEL BLOCK INSERT ERROR!");
-////        }
-//    }
-
-     PointT findCloseToMid() const {
-        double min_dis = std::numeric_limits<double>::max();
-        PointT target_min;
-        for(int i=0;i<points.size();i++){
-            auto point=points[i];
-            double dis = PointDis(point ,mid_point);
-
-            if(dis < min_dis){
-                target_min = point;
-                min_dis = dis;
-
-            }
-        }
-        return target_min;
-    }
-
-    inline int numPoints() const{
-        return points.size();
-    }
-
-    inline int Capacity(){
-        return num_points_;
-    }
-
-private:
-    int num_points_;
-    PointT mid_point;
-};
-
-//-------------------------------for neighbor-----------------------------
-using pair_distance_t = std::tuple<double, Eigen::Vector3d, Voxel>;
-
-struct __Comparator {
-    bool operator()(const pair_distance_t &left, const pair_distance_t &right) const {
-        return std::get<0>(left) < std::get<0>(right);//big to small
-    }
-};
-
-typedef  std::priority_queue<pair_distance_t,std::vector<pair_distance_t>, __Comparator> Neighbors_queue;
 
 //---------------------------------------quat to euler--------------------
 struct EulerAngles {
@@ -212,4 +60,11 @@ EulerAngles ToEulerAngles(Eigen::Quaterniond q) {
     angles.yaw = std::atan2(siny_cosp, cosy_cosp);
 
     return angles;
+}
+
+//-------------------
+template<typename PointT>
+Eigen::Vector3d getPointXYZ(PointT point){
+    Eigen::Vector3d T(point.x,point.y,point.z);
+    return T;
 }

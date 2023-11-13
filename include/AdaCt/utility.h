@@ -8,6 +8,7 @@
 #include <thread>
 #include <chrono>
 #include <math.h>
+#include <omp.h>
 
 #include <ros/ros.h>
 #include <std_msgs/Header.h>

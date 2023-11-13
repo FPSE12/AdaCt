@@ -3,7 +3,7 @@ project(AdaCt)
 
 SET(CMAKE_BUILD_TYPE "Debug")
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++14)
+add_compile_options(-std=c++17)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -21,6 +21,9 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(OpenMP QUIET)
+
+
+
 find_package(PCL REQUIRED)
 find_package(Sophus REQUIRED)
 find_package(Eigen3 REQUIRED)
@@ -87,6 +90,7 @@ target_link_libraries(lidar_odometry_voxelmap
         ${CERES_LIBRARIES}
         ${Sophus_LIBRARIES}
         tsl::robin_map
+        OpenMP::OpenMP_CXX
         )
 
 add_executable(Transform src/Transform.cpp)

@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/wjj/SLAM_WS/lslam_ws/AdaCt_ws/src/AdaCt/cmake-build-debug/devel/setup.sh
