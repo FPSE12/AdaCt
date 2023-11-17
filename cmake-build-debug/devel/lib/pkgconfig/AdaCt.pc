@@ -1,8 +1,0 @@
-prefix=/home/wjj/SLAM_WS/lslam_ws/AdaCt_ws/src/AdaCt/cmake-build-debug/devel
-
-Name: AdaCt
-Description: Description of AdaCt
-Version: 0.0.0
-Cflags: -I/home/wjj/SLAM_WS/lslam_ws/AdaCt_ws/src/AdaCt/include
-Libs: -L${prefix}/lib 
-Requires: geometry_msgs nav_msgs roscpp rospy std_msgs sensor_msgs
