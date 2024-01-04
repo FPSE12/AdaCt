@@ -1,0 +1,14 @@
+AdaCt:
+
+  debug_print: true
+
+  lidar_topic: "/velodyne_points"
+  lidar_type: 1
+  odometry_frame: "odometry"
+
+  store_path: "/home/wjj/"
+
+  
+  initframeNum: 20
+  downsampleLeafSize: 0.5
+  

@@ -112,7 +112,8 @@ public:
 //            curr_frame.pose.begin_pose = poses[frame_count].begin_pose *(poses[frame_count-1].begin_pose.inverse() * poses[frame_count].begin_pose);
 //            curr_frame.pose.end_pose = poses[frame_count].end_pose * (poses[frame_count-1].end_pose.inverse() * poses[frame_count].end_pose);
             curr_frame.pose.begin_pose = poses.back().end_pose;
-            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+            //curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+            curr_frame.pose.end_pose = poses.back().end_pose *(poses[poses.size()-2].end_pose.inverse() * poses.back().end_pose);
         }
 
 //        curr_frame.pose.begin_pose = poses.back().end_pose;
@@ -195,7 +196,7 @@ public:
                 // find correspance
 
                 // ceres opt
-                ceres::LossFunction *loss_function = new ceres::HuberLoss(0.1);
+                ceres::LossFunction *loss_function = new ceres::CauchyLoss(0.1);
                 ceres::Problem problem;
 
                 Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
@@ -236,7 +237,7 @@ public:
                 int opt_num=0;
                 cloud_valid->clear();
 
-
+//#pragma omp parallel for num_threads(8)
                 for (int i = 0; i < cloud_size; i++) {
 
 
@@ -270,7 +271,7 @@ public:
                                 new CTFunctor2(alpha, raw_point, getPointXYZ(neighbor.points[0]), weight,neighbor.description.normal));
 
                         problem.AddResidualBlock(cost_function,
-                                                 nullptr,
+                                                 loss_function,
                                                  begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
                         cloud_valid->push_back(curr_frame.cloud_ori_downsample->points[i]);
                     }

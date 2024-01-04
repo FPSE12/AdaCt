@@ -24,6 +24,8 @@
 
 using namespace std;
 
+
+
 enum lidar_type{RS, VLP, LIVOX};
 
 // struct PointXYZIRT
@@ -61,6 +63,22 @@ public:
     double map_resolution;
     double local_map_size;
 
+    int N_SCAN;
+    int Horizon_SCAN;
+    int groundScanInd;
+    double vertical_fov;
+    double ang_res_x;
+    double ang_res_y;
+    double segmentAlphaX;
+    double segmentAlphaY;
+    double segmentTheta = 60.0/180.0 *M_PI;
+    int segmentValidPointNum = 5;
+    int segmentValidLineNum = 3;
+
+    float edgeThreshold = 0.1;
+    float surfThreshold = 0.1;
+    float nearestFeatureSearchSqDist = 25;
+
     configParam(){
         nh.param<bool>("AdaCt/debug_print",debug_print,true);
         nh.param<int>("AdaCt/lidar_type",lidar_type,1);
@@ -69,6 +87,15 @@ public:
         nh.param<double>("AdaCT/map_resolution",map_resolution,0.5);
         nh.param<double>("AdaCt/local_map_size",local_map_size,1000);
         nh.param<std::string>("AdaCt/odometry_frame",odometry_frame,"odometry");
+        nh.param<int>("",N_SCAN,32);
+        nh.param<int>("", Horizon_SCAN, 1800);
+        nh.param<double>("",vertical_fov,41.3);
+        nh.param<int>("",groundScanInd,20);
+        ang_res_x = (double )360/Horizon_SCAN;
+        ang_res_y = (double )vertical_fov/(N_SCAN-1);
+        segmentAlphaX = ang_res_x / 180.0 * M_PI;
+        //segmentAlphaY = ang_res_y / 180.0 * M_PI;
+        segmentAlphaY = 41.33/180*M_PI;
 
     }
 };

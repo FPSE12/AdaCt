@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   rospy
   std_msgs
   sensor_msgs
+        message_generation
         tf
 )
 
@@ -30,12 +31,25 @@ find_package(Eigen3 REQUIRED)
 find_package(Ceres REQUIRED)
 find_package(tsl-robin-map REQUIRED)
 find_package(glog REQUIRED)
+find_package(OpenCV REQUIRED)
+
+add_message_files(
+        FILES
+        cloud_info.msg
+)
+
+generate_messages(
+        DEPENDENCIES
+        geometry_msgs
+        std_msgs
+        nav_msgs
+)
 
 
 catkin_package(
  INCLUDE_DIRS include
 #  LIBRARIES AdaCt
- CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs sensor_msgs
+ CATKIN_DEPENDS geometry_msgs nav_msgs roscpp rospy std_msgs sensor_msgs message_generation message_runtime
 #  DEPENDS system_lib
 )
 
@@ -52,8 +66,30 @@ include_directories(
   ${Sophus_INCLUDE_DIRS}
   ${Eigen3_INCLUDE_DIRS}
   ${CERES_INCLUDE_DIRS}
+        ${OPENCV_INCLUDE_DIRS}
         ${GLOG_INCLUDE_DIRS}
 )
+
+add_executable(preprocess src/preprocess.cpp)
+target_link_libraries(preprocess
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBRARIES}
+        )
+
+add_executable(preprocess_new src/preprocess_new.cpp)
+target_link_libraries(preprocess_new
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBRARIES}
+        )
+
+add_executable(featureAssociation src/featureAssociation.cpp)
+target_link_libraries(featureAssociation
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${OpenCV_LIBRARIES}
+        )
 
 
 add_executable(lidar_odometry src/lidar_odometry.cpp include/ikd-Tree/ikd_Tree.cpp)
@@ -85,6 +121,36 @@ target_link_libraries(lidar_odometry_downsample
 
 add_executable(lidar_odometry_voxelmap src/lidar_odometry_voxelmap.cpp )
 target_link_libraries(lidar_odometry_voxelmap
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        OpenMP::OpenMP_CXX
+        )
+
+add_executable(lidar_odometry_voxelmapMultiMode src/lidar_odometry_voxelmapMultiMode.cpp)
+target_link_libraries(lidar_odometry_voxelmapMultiMode
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        OpenMP::OpenMP_CXX
+        )
+
+add_executable(lidar_odometry_featureVoxelmap src/lidar_odometry_featureVoxelmap.cpp )
+target_link_libraries(lidar_odometry_featureVoxelmap
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        OpenMP::OpenMP_CXX
+        )
+
+add_executable(lidar_odometry_featureVoxelmapNew src/lidar_odometry_featureVoxelmapNew.cpp )
+target_link_libraries(lidar_odometry_featureVoxelmapNew
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}
         ${CERES_LIBRARIES}

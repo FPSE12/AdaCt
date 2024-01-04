@@ -60,10 +60,10 @@ template<class PointT>
          return {} ;
      }
 
-     void InsertPointCloud( typename pcl::PointCloud<PointT>::ConstPtr worldCloud, OptPose curr_pose){
+     void InsertPointCloud(typename pcl::PointCloud<PointT>::ConstPtr worldCloud, OptPose curr_trans){
 
          frame_count++;
-         frameID_to_frame[frame_count]={worldCloud, curr_pose};
+         frameID_to_frame[frame_count]={worldCloud, curr_trans};
 
 
          std::set<Voxel> voxels_to_update;
@@ -78,7 +78,7 @@ template<class PointT>
          for(auto & voxel : voxels_to_update){
                 VoxelBlock<PointT> &voxel_block=map[voxel];
                 if(voxel_block.points.size()>=voxel_block.MinValidNeighborSize()){
-                    voxel_block.computeDescription(ALL_BUT_KDTREE);
+                    voxel_block.computeDescription(NORMAL);
                     voxel_block.normals.clear();
                     for(int i=0;i<voxel_block.points.size();i++){
                         voxel_block.normals.push_back(voxel_block.description.normal);
@@ -209,6 +209,79 @@ template<class PointT>
              }
          }
          return true;
+     }
+
+     bool NeighborSearchEstiPlane(const PointT & PointW,double searchThreshold,Eigen::Vector4d & pabcd){
+         Eigen::Vector3d PointW_(PointW.x, PointW.y,PointW.z);
+         Voxel voxel = Voxel::Coordinates(PointW_,voxel_size);
+         int kx=voxel.x;
+         int ky=voxel.y;
+         int kz=voxel.z;
+
+         Neighbors_queue neighborsQueue;
+
+         for(int kxx=kx-1;kxx<kx+1+1;kxx++){
+             for(int kyy=ky-1;kyy<ky+1+1;kyy++){
+                 for(int kzz=kz-1;kzz<kz+1+1;kzz++){
+                     voxel.x=kxx;
+                     voxel.y=kyy;
+                     voxel.z=kzz;
+
+                     auto search = map.find(voxel);
+                     if(search != map.end()){
+                         auto voxel_block = search.value();
+                         for(int i=0;i<voxel_block.points.size();i++){
+                             Eigen::Vector3d neighbor(voxel_block.points[i].x,voxel_block.points[i].y,voxel_block.points[i].z);
+
+//                             if(voxel_block.is_normal_oriented[i] && voxel_block.is_normal_computed[i]){
+//                                 double scalar = (sensor_location-PointW_).dot(voxel_block.normals[i]);
+//                                 if(scalar<0.){//theta >90
+//                                     continue;
+//                                 }
+//                             }
+
+                             double dis=(PointW_-neighbor).norm();
+                             if(dis<searchThreshold){
+                                 if(neighborsQueue.size() == max_neighbor_nums){
+                                     if(dis < std::get<0>(neighborsQueue.top())){
+                                         neighborsQueue.pop();
+
+                                         neighborsQueue.emplace(dis,neighbor,voxel);
+
+
+                                     }
+                                 }else{
+
+                                     neighborsQueue.emplace(dis,neighbor,voxel);
+
+                                 }
+                             }
+                         }
+                     }
+
+                 }
+             }
+         }
+
+         if(neighborsQueue.size() >= max_neighbor_nums && esti_plane(pabcd, neighborsQueue, 0.1f)){//estiplane?
+             double point2plane = PointW_(0) * pabcd(0) + PointW_(1) * pabcd(1) + PointW_(2) * pabcd(2) + pabcd(3);
+             double s = 1 - 0.9 * point2plane;
+             if(s>0.9){
+//                 while(!neighborsQueue.empty()){
+//                     PointT temp;
+//                     temp.x=std::get<1>(neighborsQueue.top()).x();
+//                     temp.y=std::get<1>(neighborsQueue.top()).y();
+//                     temp.z=std::get<1>(neighborsQueue.top()).z();
+//                    // neighbor.addPoint(temp);
+//                     neighborsQueue.pop();
+//                 }
+//                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
+
+                 return true;
+             }
+         }
+
+         return false;
      }
 
      //only consider the point location when trans agressively is unreliable.

@@ -145,7 +145,7 @@ struct VoxelBlock{
 
         }
 
-        calculateMid(point);
+        //calculateMid(point);
         points.push_back(point);
 
 //        if( !legal()) {
