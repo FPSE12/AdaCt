@@ -284,7 +284,7 @@ public:
 
             cloud_ori_downsample->points.push_back(midP);
         }
-        ROS_INFO("DOWN:%d",cloud_ori_downsample->points.size());
+        //ROS_INFO("DOWN:%d",cloud_ori_downsample->points.size());
 
     }
 

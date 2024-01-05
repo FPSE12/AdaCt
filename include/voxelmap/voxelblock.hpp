@@ -55,30 +55,45 @@ VoxelBlockDescription<T> ComputeNeighborhoodInfo(const Eigen::Matrix<T,3,1> &bar
     VoxelBlockDescription<T> result;
 
     result.barycenter = barycenter;
-    result.covariance = covariance;
+    result.covariance = covariance;//
 
-    Eigen::JacobiSVD<Eigen::Matrix<T,3,3>> svd(covariance,Eigen::ComputeFullV);
+    //svd
+//    Eigen::JacobiSVD<Eigen::Matrix<T,3,3>> svd(covariance,Eigen::ComputeFullV);
 
+//    if (values & LINE) {
+//        Eigen::Matrix<T,3,3> V = svd.matrixV();
+//        result.line = V.template block<3, 1>(0, 0);
+//    }
+//
+//    if (values & NORMAL) {
+//        Eigen::Matrix<T,3,3> V = svd.matrixV();
+//        result.normal = V.template block<3, 1>(0, 2);
+//    }
+//    Eigen::Matrix<T, 3, 1> singular_values = svd.singularValues().cwiseAbs();
+//    if (values & LINEARITY)
+//        result.linearity = (singular_values[0] - singular_values[1]) / singular_values[0];
+//    if (values & PLANARITY)
+//        result.planarity = (singular_values[1] - singular_values[2]) / singular_values[0];
+//    if (values & A2D)
+//        result.a2D = (std::sqrt(singular_values[1]) - std::sqrt(singular_values[2])) / std::sqrt(
+//                singular_values[0]); //Be careful, the eigenvalues are not correct with the iterative way to compute the covariance matrix
+//    if (values & COV_DET)
+//        result.cov_det = covariance.determinant();
 
-    if (values & LINE) {
-        Eigen::Matrix<T,3,3> V = svd.matrixV();
-        result.line = V.template block<3, 1>(0, 0);
+    //new
+    Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d > es(covariance);
+
+    if(values & NORMAL){
+        result.normal = es.eigenvectors().col(0).normalized();
     }
 
-    if (values & NORMAL) {
-        Eigen::Matrix<T,3,3> V = svd.matrixV();
-        result.normal = V.template block<3, 1>(0, 2);
+    double sigma_1 = sqrt(std::abs(es.eigenvalues()[2]));
+    double sigma_2 = sqrt(std::abs(es.eigenvalues()[1]));
+    double sigma_3 = sqrt(std::abs(es.eigenvalues()[0]));
+
+    if(values & A2D){
+        result.a2D = (sigma_2 - sigma_3)/sigma_1;
     }
-    Eigen::Matrix<T, 3, 1> singular_values = svd.singularValues().cwiseAbs();
-    if (values & LINEARITY)
-        result.linearity = (singular_values[0] - singular_values[1]) / singular_values[0];
-    if (values & PLANARITY)
-        result.planarity = (singular_values[1] - singular_values[2]) / singular_values[0];
-    if (values & A2D)
-        result.a2D = (std::sqrt(singular_values[1]) - std::sqrt(singular_values[2])) / std::sqrt(
-                singular_values[0]); //Be careful, the eigenvalues are not correct with the iterative way to compute the covariance matrix
-    if (values & COV_DET)
-        result.cov_det = covariance.determinant();
 
     return result;
 }
@@ -113,7 +128,9 @@ struct VoxelBlock{
     }
 
 
-
+    void clear(){
+        points.clear();
+    }
     void calculateMid(PointT newP){
         mid_point.x = (mid_point.x * points.size()+newP.x)/(points.size()+1);
         mid_point.y = (mid_point.y * points.size()+newP.y)/(points.size()+1);
@@ -189,13 +206,25 @@ struct VoxelBlock{
         for(auto &point:points){
             point_ref = getPointXYZ(point);
             braycenter += point_ref;
-            cov += (point_ref*point_ref.transpose());
+            //cov += (point_ref*point_ref.transpose());
         }
 
         braycenter /= (double) points.size();
-        cov /= (double) points.size();
 
-        cov -=braycenter* braycenter.transpose();
+        for(auto &point :points){
+            Eigen::Vector3d temp_point = getPointXYZ(point);
+            for(int k=0;k<3;k++){
+                for(int l=k;l<3;l++){
+                    cov(k,l)  += (temp_point(k)-braycenter(k)) *(temp_point(l)-braycenter(l));
+                }
+            }
+        }
+        cov(1,0)=cov(0,1);
+        cov(2,0)=cov(0,2);
+        cov(2,1)=cov(1,2);
+        // cov /= (double) points.size();
+
+        //cov -=braycenter* braycenter.transpose();
 
         description = ComputeNeighborhoodInfo(braycenter,cov,values);
 

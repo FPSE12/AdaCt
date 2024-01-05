@@ -232,17 +232,19 @@ public:
 
 
                 int cloud_size = curr_frame.cloud_ori_downsample->size();
-
+                ROS_INFO("AFTER DOWNSAMPLE:%d",cloud_size);
                 auto findNeighbor_start = std::chrono::steady_clock::now();
                 int opt_num=0;
                 cloud_valid->clear();
-
+                double find_neighborcost=0;
+                double compouteDisatribute=0;
 //#pragma omp parallel for num_threads(8)
                 for (int i = 0; i < cloud_size; i++) {
 
 
                     //Neighbors_queue neighborsQueue;
                     VoxelBlock<PointXYZIRT> neighbor;
+                    //neighbor.clear();
 
                     double searchDis = 0.8;
 
@@ -257,11 +259,22 @@ public:
 //                    Eigen::Quaterniond inter_qual = begin_quat.normalized().slerp(alpha, end_quat.normalized());
 //
 //                    Eigen::Vector3d world_points = inter_qual * raw_point + sensor_local;
+                    auto time1 = std::chrono::steady_clock::now();
+                    bool IsValid=local_map.NeighborSearch(curr_frame.cloud_world->points[i],sensor_local,searchDis,neighbor,pabcd);
+                    auto time2 = std::chrono::steady_clock::now();
+                    find_neighborcost += std::chrono::duration<double, std::milli>(time2 - time1).count();
 
-                    if(local_map.NeighborSearch(curr_frame.cloud_world->points[i],sensor_local,searchDis,neighbor,pabcd)){
+                    if(IsValid){
                         opt_num++;
 
+                        auto time3 = std::chrono::steady_clock::now();
                         neighbor.computeDescription(A2D | NORMAL);
+                        if(neighbor.description.normal.dot(begin_trans-sensor_local)<0){
+                            neighbor.description.normal = -1.0 * neighbor.description.normal;
+                        }
+                        auto time4  = std::chrono::steady_clock::now();
+
+                        compouteDisatribute += std::chrono::duration<double, std::milli>(time4 - time3).count();
 //                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
 //                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
                         double weight =neighbor.description.a2D;
@@ -278,11 +291,15 @@ public:
                 }
 
 
-                publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");
+                publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");//1ms
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
                 if (debug_print) {
-                    ROS_INFO("cloud find neighbor COST: %f ms",
+                    ROS_INFO("neighbor COST: %f ms",
+                             find_neighborcost);
+                    ROS_INFO("compute COST: %f ms",
+                             compouteDisatribute);
+                    ROS_INFO("problem make COST: %f ms",
                              std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
                 }
                 //add other constraints

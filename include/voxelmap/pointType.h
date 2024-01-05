@@ -5,7 +5,7 @@
 #ifndef ADACT_POINTTYPE_H
 #define ADACT_POINTTYPE_H
 
-#include "utility.h"
+#include "AdaCt/utility.h"
 
 struct Point3D{
     Eigen::Vector3d raw_points;
@@ -14,6 +14,7 @@ struct Point3D{
     double intensity;
     double alpha_time;//[0,1]
     double timestamp;
+    int ring;
 };
 
 #endif //ADACT_POINTTYPE_H

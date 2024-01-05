@@ -312,11 +312,20 @@ public:
                                          begin_trans.data()
 
                         );
-                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocity,3,3,3>(
-                        new ConstantVelocity(poses.back().endTrans()-poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
-                        nullptr,
-                        begin_trans.data(),end_trans.data()
-                        );
+                //v consist
+                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<MultiModeConstantVelocity, 6, 3, 3, 3>(
+                                                 new MultiModeConstantVelocity(
+                                                         poses.back().endTrans() - poses.back().poses[1].translation(),
+                                                         std::sqrt(opt_num * 0.001))),
+                                         nullptr,
+                                         begin_trans.data(), mid_trans.data(), end_trans.data()
+                );
+
+                //w?
+
+
+
+
                 // solve
                 ceres::Solver::Options option;
                 option.linear_solver_type = ceres::DENSE_QR;

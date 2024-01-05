@@ -28,7 +28,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: valid_cloud
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -141,6 +141,10 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
+        map:
+          Value: true
+        odometry:
+          Value: true
       Marker Alpha: 1
       Marker Scale: 2
       Name: TF
@@ -148,7 +152,9 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        {}
+        map:
+          odometry:
+            {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -459,7 +465,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 23.628549575805664
+      Distance: 24.904708862304688
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -475,9 +481,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.10979907214641571
+      Pitch: 0.9747968912124634
       Target Frame: <Fixed Frame>
-      Yaw: 1.4395496845245361
+      Yaw: 2.9314119815826416
     Saved: ~
 Window Geometry:
   Displays:

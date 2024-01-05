@@ -66,46 +66,46 @@ template<class PointT>
          frameID_to_frame[frame_count]={worldCloud, curr_trans};
 
 
-         std::set<Voxel> voxels_to_update;
+//         std::set<Voxel> voxels_to_update;
 
          for(int i=0;i<worldCloud->points.size();i++ ){
              //Eigen::Vector3d Wpoint(point.x, point.y, point.z);
              PointT point=worldCloud->points[i];
              auto voxel=InsertPoint(point,frame_count,i);
-             voxels_to_update.insert(*voxel);
+//             voxels_to_update.insert(*voxel);
          }
 
-         for(auto & voxel : voxels_to_update){
-                VoxelBlock<PointT> &voxel_block=map[voxel];
-                if(voxel_block.points.size()>=voxel_block.MinValidNeighborSize()){
-                    voxel_block.computeDescription(NORMAL);
-                    voxel_block.normals.clear();
-                    for(int i=0;i<voxel_block.points.size();i++){
-                        voxel_block.normals.push_back(voxel_block.description.normal);
-                        voxel_block.is_normal_computed[i]=true;
-                        if(frameID_to_frame.find(voxel_block.frame_ids[i]) != frameID_to_frame.end()){
-                            Eigen::Vector3d begin_trans = frameID_to_frame[voxel_block.frame_ids[i]].pose.beginTrans();
-                            Eigen::Vector3d point = voxel_block.getPointXYZ(voxel_block.points[i]);
-                            if((point-begin_trans).template dot(voxel_block.normals[i])>.0){
-                                voxel_block.normals[i] = -voxel_block.normals[i];
-                            }
-                            voxel_block.is_normal_oriented[i] = true;
-                        }else{
-                            voxel_block.is_normal_oriented[i] = false;
-                        }
-
-                    }
-
-                }
-
-         }
-
-         frame_indices.push_back(frame_count-1);
-         while(frame_indices.size()>max_frames_to_keep){
-             auto old_idx=frame_indices.front();
-             frame_indices.pop_front();
-             frameID_to_frame[old_idx].pointCloud = nullptr;
-         }
+//         for(auto & voxel : voxels_to_update){
+//                VoxelBlock<PointT> &voxel_block=map[voxel];
+//                if(voxel_block.points.size()>=voxel_block.MinValidNeighborSize()){
+//                    voxel_block.computeDescription(NORMAL);
+//                    voxel_block.normals.clear();
+//                    for(int i=0;i<voxel_block.points.size();i++){
+//                        voxel_block.normals.push_back(voxel_block.description.normal);
+//                        voxel_block.is_normal_computed[i]=true;
+//                        if(frameID_to_frame.find(voxel_block.frame_ids[i]) != frameID_to_frame.end()){
+//                            Eigen::Vector3d begin_trans = frameID_to_frame[voxel_block.frame_ids[i]].pose.beginTrans();
+//                            Eigen::Vector3d point = voxel_block.getPointXYZ(voxel_block.points[i]);
+//                            if((point-begin_trans).template dot(voxel_block.normals[i])>.0){
+//                                voxel_block.normals[i] = -voxel_block.normals[i];
+//                            }
+//                            voxel_block.is_normal_oriented[i] = true;
+//                        }else{
+//                            voxel_block.is_normal_oriented[i] = false;
+//                        }
+//
+//                    }
+//
+//                }
+//
+//         }
+//
+//         frame_indices.push_back(frame_count-1);
+//         while(frame_indices.size()>max_frames_to_keep){
+//             auto old_idx=frame_indices.front();
+//             frame_indices.pop_front();
+//             frameID_to_frame[old_idx].pointCloud = nullptr;
+//         }
          return;
      }
 
@@ -310,12 +310,13 @@ template<class PointT>
                          for(int i=0;i<voxel_block.points.size();i++){
                              Eigen::Vector3d neighbor(voxel_block.points[i].x,voxel_block.points[i].y,voxel_block.points[i].z);
 
-                             if(voxel_block.is_normal_oriented[i] && voxel_block.is_normal_computed[i]){
-                                double scalar = (sensor_location-PointW_).dot(voxel_block.normals[i]);
-                                if(scalar<0.){//theta >90
-                                    continue;
-                                }
-                             }
+//                             if(voxel_block.is_normal_oriented[i] && voxel_block.is_normal_computed[i]){
+//                                double scalar = (sensor_location-PointW_).dot(voxel_block.normals[i]);
+//                                if(scalar<0.){//theta >90
+//                                    continue;
+//
+//                                }
+//                             }
 
                              double dis=(PointW_-neighbor).norm();
                              if(dis<searchThreshold){

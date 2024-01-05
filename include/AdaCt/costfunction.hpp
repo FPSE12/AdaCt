@@ -59,6 +59,28 @@ private:
     double beta_=1.0;
 };
 
+
+struct MultiModeConstantVelocity{
+    MultiModeConstantVelocity(const Eigen::Vector3d &previoud_velocity, double beta ):previou_velocity_(previoud_velocity),beta_(beta){}
+
+    template<typename T>
+    bool operator()(const T * const begin_t, const T* const mid_t ,const T *const end_t, T * residual) const{
+        residual[0]=beta_*(mid_t[0]-begin_t[0]-previou_velocity_(0,0));
+        residual[1]=beta_*(mid_t[1]-begin_t[1]-previou_velocity_(1,0));
+        residual[2]=beta_*(mid_t[2]-begin_t[2]-previou_velocity_(2,0));
+
+        residual[3]=beta_*(end_t[0]-mid_t[0]-mid_t[0]+begin_t[0]);
+        residual[4]=beta_*(end_t[1]-mid_t[1]-mid_t[1]+begin_t[1]);
+        residual[5]=beta_*(end_t[2]-mid_t[2]-mid_t[2]+begin_t[2]);
+
+
+        return true;
+    }
+private:
+    Eigen::Vector3d previou_velocity_;
+    double beta_=1.0;
+};
+
 struct CTFunctor{
     
     CTFunctor(double alpha,const V3D &raw_point,const Eigen::Vector4d& pabcd, double weight)
