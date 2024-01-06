@@ -59,7 +59,7 @@ VoxelBlockDescription<T> ComputeNeighborhoodInfo(const Eigen::Matrix<T,3,1> &bar
 
     //svd
 //    Eigen::JacobiSVD<Eigen::Matrix<T,3,3>> svd(covariance,Eigen::ComputeFullV);
-
+//
 //    if (values & LINE) {
 //        Eigen::Matrix<T,3,3> V = svd.matrixV();
 //        result.line = V.template block<3, 1>(0, 0);
@@ -194,6 +194,9 @@ struct VoxelBlock{
     }
 
     void computeDescription(int values){
+
+        //auto computeB = std::chrono::steady_clock::now();
+        //0.01ms ctlo:0.0003ms
         if(points.size()<MinValidNeighborSize()){
             isValid= false;
             return;
@@ -211,6 +214,7 @@ struct VoxelBlock{
 
         braycenter /= (double) points.size();
 
+        //faster
         for(auto &point :points){
             Eigen::Vector3d temp_point = getPointXYZ(point);
             for(int k=0;k<3;k++){
@@ -222,13 +226,29 @@ struct VoxelBlock{
         cov(1,0)=cov(0,1);
         cov(2,0)=cov(0,2);
         cov(2,1)=cov(1,2);
-        // cov /= (double) points.size();
+//         cov /= (double) points.size();
+//
+//        cov -=braycenter* braycenter.transpose();
 
-        //cov -=braycenter* braycenter.transpose();
 
-        description = ComputeNeighborhoodInfo(braycenter,cov,values);
 
-        computed_values = values;
+        //description = ComputeNeighborhoodInfo(braycenter,cov,values);
+        Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d > es(cov);
+
+
+        description.normal = es.eigenvectors().col(0).normalized();
+
+
+        double sigma_1 = sqrt(std::abs(es.eigenvalues()[2]));
+        double sigma_2 = sqrt(std::abs(es.eigenvalues()[1]));
+        double sigma_3 = sqrt(std::abs(es.eigenvalues()[0]));
+
+
+        description.a2D = (sigma_2 - sigma_3)/sigma_1;
+
+//        auto computeE = std::chrono::steady_clock::now();
+//        std::cout<<"compute:"<<std::chrono::duration<double, std::milli >(computeE-computeB).count()<<std::endl;
+
 
         //build kdtree?
 

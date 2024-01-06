@@ -3,7 +3,17 @@ project(AdaCt)
 
 SET(CMAKE_BUILD_TYPE "Debug")
 ## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++17)
+#add_compile_options(-std=c++17)
+
+ADD_COMPILE_OPTIONS(-std=c++17 )
+ADD_COMPILE_OPTIONS(-std=c++17 )
+# set c++17 03等级，优化效率，这是关键！！
+set( CMAKE_CXX_FLAGS "-std=c++17 -O3" )
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fexceptions" )
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -pthread -std=c++0x -std=c++17 -fexceptions")
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)

@@ -6,7 +6,7 @@
 #include "voxelblock.hpp"
 #include "AdaCt/optPose.hpp"
 
-#define max_neighbor_nums 5
+#define max_neighbor_nums 20
 
 
 
@@ -63,7 +63,7 @@ template<class PointT>
      void InsertPointCloud(typename pcl::PointCloud<PointT>::ConstPtr worldCloud, OptPose curr_trans){
 
          frame_count++;
-         frameID_to_frame[frame_count]={worldCloud, curr_trans};
+//         frameID_to_frame[frame_count]={worldCloud, curr_trans};
 
 
 //         std::set<Voxel> voxels_to_update;
@@ -285,7 +285,7 @@ template<class PointT>
      }
 
      //only consider the point location when trans agressively is unreliable.
-     bool NeighborSearch(const PointT & PointW,Eigen::Vector3d sensor_location,double searchThreshold, VoxelBlock<PointT> & neighbor ,Eigen::Vector4d & pabcd){
+     bool NeighborSearch(const PointT & PointW,Eigen::Vector3d sensor_location,double searchThreshold, std::vector<Eigen::Vector3d> & neighbor ,Eigen::Vector4d & pabcd){
 //            neighbors.reserve(max_num_beighbor);
 //            SearchDis.reserve(max_num_beighbor);
 
@@ -297,9 +297,9 @@ template<class PointT>
 
          Neighbors_queue neighborsQueue;
 
-         for(int kxx=kx-1;kxx<kx+1+1;kxx++){
-             for(int kyy=ky-1;kyy<ky+1+1;kyy++){
-                 for(int kzz=kz-1;kzz<kz+1+1;kzz++){
+         for(int kxx=kx-1;kxx<kx+1+1;++kxx){
+             for(int kyy=ky-1;kyy<ky+1+1;++kyy){
+                 for(int kzz=kz-1;kzz<kz+1+1;++kzz){
                      voxel.x=kxx;
                      voxel.y=kyy;
                      voxel.z=kzz;
@@ -319,7 +319,7 @@ template<class PointT>
 //                             }
 
                              double dis=(PointW_-neighbor).norm();
-                             if(dis<searchThreshold){
+//                             if(dis<searchThreshold){
                                  if(neighborsQueue.size() == max_neighbor_nums){
                                      if(dis < std::get<0>(neighborsQueue.top())){
                                          neighborsQueue.pop();
@@ -333,7 +333,7 @@ template<class PointT>
                                      neighborsQueue.emplace(dis,neighbor,voxel);
 
                                  }
-                             }
+//                             }
                          }
                      }
 
@@ -361,11 +361,11 @@ template<class PointT>
          if(neighborsQueue.size() >= max_neighbor_nums ){//estiplane?
 
              while(!neighborsQueue.empty()){
-                 PointT temp;
-                 temp.x=std::get<1>(neighborsQueue.top()).x();
-                 temp.y=std::get<1>(neighborsQueue.top()).y();
-                 temp.z=std::get<1>(neighborsQueue.top()).z();
-                 neighbor.addPoint(temp);
+                 Eigen::Vector3d temp;
+                 temp[0]=std::get<1>(neighborsQueue.top()).x();
+                 temp[1]=std::get<1>(neighborsQueue.top()).y();
+                 temp[2]=std::get<1>(neighborsQueue.top()).z();
+                 neighbor.push_back(temp);
                  neighborsQueue.pop();
              }
 //                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
@@ -405,10 +405,10 @@ template<class PointT>
 
      };
      int frame_count;
-     tsl::robin_map<size_t,Frame> frameID_to_frame;
+//     tsl::robin_map<size_t,Frame> frameID_to_frame;
 
      int max_frames_to_keep;
-     std::list<size_t> frame_indices;
+//     std::list<size_t> frame_indices;
 
 
  };

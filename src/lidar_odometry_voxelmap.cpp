@@ -81,7 +81,7 @@ public:
         first_flag = true;
         frame_count =-1;
 
-        iter_nums =5;
+        iter_nums =10;
 
         rosCloudQue.clear();
 
@@ -190,6 +190,58 @@ public:
                 ROS_INFO("INIT COST: %f ms", std::chrono::duration<double, std::milli>(initframe_end-initframe_start).count());
             }
 
+            auto estimateNeighborHood = [&](std::vector<Eigen::Vector3d >& neighbor, Eigen::Vector3d & location, Eigen::Vector3d & begin_trans)
+            {
+                Eigen::Vector3d braycenter = Eigen::Vector3d::Zero();
+                Eigen::Matrix3d cov = Eigen::Matrix3d::Zero();
+                VoxelBlockDescription<double > description;
+                //Eigen::Vector3d point_ref;
+
+                for(auto &point : neighbor){
+                    //point_ref = Eigen::Vector3d(point.x,point.y,point.z);
+                    braycenter += point;
+                    //cov += (point_ref*point_ref.transpose());
+                }
+
+                braycenter /= (double) neighbor.size();
+
+                //faster
+                for(auto &point :neighbor){
+                    //Eigen::Vector3d temp_point = Eigen::Vector3d(point.x,point.y,point.z);
+                    for(int k=0;k<3;k++){
+                        for(int l=k;l<3;l++){
+                            cov(k,l)  += (point(k)-braycenter(k)) *(point(l)-braycenter(l));
+                        }
+                    }
+                }
+                cov(1,0)=cov(0,1);
+                cov(2,0)=cov(0,2);
+                cov(2,1)=cov(1,2);
+
+                description.barycenter=braycenter;
+                description.covariance=cov;
+
+                Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d > es(cov);
+
+                Eigen::Vector3d normal(es.eigenvectors().col(0).normalized());
+
+
+
+                description.normal = normal;
+
+
+                double sigma_1 = sqrt(std::abs(es.eigenvalues()[2]));
+                double sigma_2 = sqrt(std::abs(es.eigenvalues()[1]));
+                double sigma_3 = sqrt(std::abs(es.eigenvalues()[0]));
+
+
+                description.a2D = (sigma_2 - sigma_3)/sigma_1;
+
+                if(description.normal.dot(begin_trans-location)<0){
+                    description.normal = -1.0 * description.normal;
+                }
+                return description;
+            };
 
             for (int iter_count = 0; iter_count < iter_nums; iter_count++) {
                 //neighbor.clear();//size=0
@@ -243,7 +295,9 @@ public:
 
 
                     //Neighbors_queue neighborsQueue;
-                    VoxelBlock<PointXYZIRT> neighbor;
+                    //VoxelBlock<PointXYZIRT> neighbor;
+                    std::vector<Eigen::Vector3d > neighbor;
+
                     //neighbor.clear();
 
                     double searchDis = 0.8;
@@ -252,41 +306,49 @@ public:
 
                     double alpha = (curr_frame.cloud_ori_downsample->points[i].timestamp - curr_frame.timeStart)/( curr_frame.timeEnd- curr_frame.timeStart);
                     Eigen::Vector3d raw_point(curr_frame.cloud_ori_downsample->points[i].x,curr_frame.cloud_ori_downsample->points[i].y,curr_frame.cloud_ori_downsample->points[i].z);
+                    Eigen::Vector3d world_point(curr_frame.cloud_world->points[i].x,curr_frame.cloud_world->points[i].y,curr_frame.cloud_world->points[i].z);
 
-
-                    Eigen::Vector3d sensor_local= (1-alpha)* begin_trans + alpha * end_trans;
+//                    Eigen::Vector3d sensor_local= (1-alpha)* begin_trans + alpha * end_trans;
 
 //                    Eigen::Quaterniond inter_qual = begin_quat.normalized().slerp(alpha, end_quat.normalized());
 //
 //                    Eigen::Vector3d world_points = inter_qual * raw_point + sensor_local;
                     auto time1 = std::chrono::steady_clock::now();
-                    bool IsValid=local_map.NeighborSearch(curr_frame.cloud_world->points[i],sensor_local,searchDis,neighbor,pabcd);
+                    bool IsValid=local_map.NeighborSearch(curr_frame.cloud_world->points[i],raw_point,searchDis,neighbor,pabcd);
                     auto time2 = std::chrono::steady_clock::now();
                     find_neighborcost += std::chrono::duration<double, std::milli>(time2 - time1).count();
+
+
 
                     if(IsValid){
                         opt_num++;
 
                         auto time3 = std::chrono::steady_clock::now();
-                        neighbor.computeDescription(A2D | NORMAL);
-                        if(neighbor.description.normal.dot(begin_trans-sensor_local)<0){
-                            neighbor.description.normal = -1.0 * neighbor.description.normal;
-                        }
+//                        neighbor.computeDescription(A2D | NORMAL);
+//                        if(neighbor.description.normal.dot(begin_trans-raw_point)<0){
+//                            neighbor.description.normal = -1.0 * neighbor.description.normal;
+//                        }
+                        VoxelBlockDescription<double> description= estimateNeighborHood(neighbor, raw_point, begin_trans);
                         auto time4  = std::chrono::steady_clock::now();
 
-                        compouteDisatribute += std::chrono::duration<double, std::milli>(time4 - time3).count();
+                        compouteDisatribute = std::chrono::duration<double, std::milli>(time4 - time3).count();
 //                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
 //                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
-                        double weight =neighbor.description.a2D;
-//                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
+                        double dis_point = std::abs((world_point-neighbor.back()).transpose() * description.normal) ;
+                        if(dis_point<0.5){
+                            double weight =description.a2D;
+//                         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
 //                                new CTFunctor(alpha, raw_point, pabcd, weight));
-                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
-                                new CTFunctor2(alpha, raw_point, getPointXYZ(neighbor.points[0]), weight,neighbor.description.normal));
+                            ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
+                                    new CTFunctor2(alpha, raw_point, neighbor.back(), weight,description.normal));
 
-                        problem.AddResidualBlock(cost_function,
-                                                 loss_function,
-                                                 begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-                        cloud_valid->push_back(curr_frame.cloud_ori_downsample->points[i]);
+                            problem.AddResidualBlock(cost_function,
+                                                     loss_function,
+                                                     begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+                            cloud_valid->push_back(curr_frame.cloud_ori_downsample->points[i]);
+                        }
+
+
                     }
                 }
 
@@ -295,10 +357,10 @@ public:
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
                 if (debug_print) {
-                    ROS_INFO("neighbor COST: %f ms",
-                             find_neighborcost);
-                    ROS_INFO("compute COST: %f ms",
-                             compouteDisatribute);
+//                    ROS_INFO("neighbor COST: %f ms",
+//                             find_neighborcost);
+//                    ROS_INFO("compute COST: %f ms",
+//                             compouteDisatribute);
                     ROS_INFO("problem make COST: %f ms",
                              std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
                 }
@@ -356,7 +418,7 @@ public:
 
             // update local_map
             auto map_start = std::chrono::steady_clock::now();
-            local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
+            local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),100);
             local_map.InsertPointCloud(curr_frame.cloud_world,curr_frame.pose);
             poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();

@@ -445,13 +445,13 @@ public:
             //千万不能用push_back，会在size的基础上进行增加
             cloud_world->points[i]=temp;
 
-            temp_P = pose.end_pose.inverse() * temp_P;
-
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            cloud_deskew->points[i]=temp;
+//            temp_P = pose.end_pose.inverse() * temp_P;
+//
+//            temp.x=temp_P[0];
+//            temp.y=temp_P[1];
+//            temp.z=temp_P[2];
+//
+//            cloud_deskew->points[i]=temp;
         }
         return;
     }
