@@ -8,6 +8,7 @@
 
 #define max_neighbor_nums 20
 
+#define MAP_VOXEL_SIZE 0.4
 
 
 template<class PointT>
@@ -15,7 +16,7 @@ template<class PointT>
  public:
      Voxelmap(){
          //0.2  ,0.03, 50; 0.5,0.1,40,1.5,0.15,40
-         voxel_size=0.5;
+         voxel_size=MAP_VOXEL_SIZE;
          max_voxel_block_size=40;
          min_distance_between_points=0.1;
          num_points=0;
@@ -285,7 +286,7 @@ template<class PointT>
      }
 
      //only consider the point location when trans agressively is unreliable.
-     bool NeighborSearch(const PointT & PointW,Eigen::Vector3d sensor_location,double searchThreshold, std::vector<Eigen::Vector3d> & neighbor ,Eigen::Vector4d & pabcd){
+     bool NeighborSearch(const PointT & PointW,Eigen::Vector3d sensor_location,double searchThreshold, VoxelBlock<PointXYZIRT> & neighbor ,Eigen::Vector4d & pabcd){
 //            neighbors.reserve(max_num_beighbor);
 //            SearchDis.reserve(max_num_beighbor);
 
@@ -306,7 +307,8 @@ template<class PointT>
 
                      auto search = map.find(voxel);
                      if(search != map.end()){
-                         auto voxel_block = search.value();
+                         auto & voxel_block = search.value();
+
                          for(int i=0;i<voxel_block.points.size();i++){
                              Eigen::Vector3d neighbor(voxel_block.points[i].x,voxel_block.points[i].y,voxel_block.points[i].z);
 
@@ -319,7 +321,7 @@ template<class PointT>
 //                             }
 
                              double dis=(PointW_-neighbor).norm();
-//                             if(dis<searchThreshold){
+                             //if(dis<searchThreshold){
                                  if(neighborsQueue.size() == max_neighbor_nums){
                                      if(dis < std::get<0>(neighborsQueue.top())){
                                          neighborsQueue.pop();
@@ -333,7 +335,7 @@ template<class PointT>
                                      neighborsQueue.emplace(dis,neighbor,voxel);
 
                                  }
-//                             }
+                             //}
                          }
                      }
 
@@ -361,11 +363,17 @@ template<class PointT>
          if(neighborsQueue.size() >= max_neighbor_nums ){//estiplane?
 
              while(!neighborsQueue.empty()){
-                 Eigen::Vector3d temp;
-                 temp[0]=std::get<1>(neighborsQueue.top()).x();
-                 temp[1]=std::get<1>(neighborsQueue.top()).y();
-                 temp[2]=std::get<1>(neighborsQueue.top()).z();
-                 neighbor.push_back(temp);
+//                 Eigen::Vector3d temp;
+//                 temp[0]=std::get<1>(neighborsQueue.top()).x();
+//                 temp[1]=std::get<1>(neighborsQueue.top()).y();
+//                 temp[2]=std::get<1>(neighborsQueue.top()).z();
+                 //neighbor.push_back(temp);
+
+                 PointXYZIRT temp;
+                 temp.x=std::get<1>(neighborsQueue.top()).x();
+                 temp.y=std::get<1>(neighborsQueue.top()).y();
+                 temp.z=std::get<1>(neighborsQueue.top()).z();
+                 neighbor.points.push_back(temp);
                  neighborsQueue.pop();
              }
 //                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
@@ -385,7 +393,7 @@ template<class PointT>
      }
      ~Voxelmap()=default;
 
- private:
+// private:
      //voxel point
      double voxel_size;
      int max_voxel_block_size;
@@ -397,6 +405,7 @@ template<class PointT>
      int num_points;
 
      tsl::robin_map<Voxel, VoxelBlock<PointT>> map;
+//     std::unordered_map<Voxel, VoxelBlock<PointT>> map;
 
 
      struct Frame{
@@ -406,7 +415,7 @@ template<class PointT>
      };
      int frame_count;
 //     tsl::robin_map<size_t,Frame> frameID_to_frame;
-
+//
      int max_frames_to_keep;
 //     std::list<size_t> frame_indices;
 

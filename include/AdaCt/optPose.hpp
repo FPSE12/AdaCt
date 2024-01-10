@@ -95,7 +95,7 @@ public:
         Eigen::Vector3d this_tran = this->endTrans();
         double delta_trans = (other_trans-this_tran).norm();
 
-        if(delta_thate < 0.01 && delta_trans < 0.01) return true;
+        if(delta_thate < 0.05 && delta_trans < 0.01) return true;
 
         return false;
     }

@@ -48,7 +48,7 @@ bool esti_plane(Eigen::Vector4d &pabcd, std::vector<pcl::PointXYZ, Eigen::aligne
 
 
 
-class Lidar_preprocess : public configParam
+class Lidar_odo : public configParam
 {
 public:
     ros::Subscriber lidar_sub;
@@ -89,10 +89,10 @@ public:
     OptPose pre_pose, curr_pose;
     int iter_nums; // 5
 
-    Lidar_preprocess()
+    Lidar_odo()
     {
         //ROS_INFO("1");
-        lidar_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_preprocess::lidarCallback, this, ros::TransportHints().tcpNoDelay());
+        lidar_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_odo::lidarCallback, this, ros::TransportHints().tcpNoDelay());
         map_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/global_map",1);
         odo_pub = nh.advertise<nav_msgs::Odometry>("adact/odometry",1);
         traj_pub = nh.advertise<nav_msgs::Path>("adact/path",1);
@@ -416,10 +416,10 @@ int main(int argc, char **argv)
     ROS_INFO("START LIDAR PREPROCESS!");
 
 //
-    Lidar_preprocess lp;
+    Lidar_odo lp;
 //
 //    // // 由于process是循环，如果直接运行，不会进入下面的spin，就不会进入点云回调函数，所以要新开一个线程
-    std::thread process(&Lidar_preprocess::preprocess, &lp);
+    std::thread process(&Lidar_odo::preprocess, &lp);
 //
 //    // // spin才会进入回调函数
     ros::spin();

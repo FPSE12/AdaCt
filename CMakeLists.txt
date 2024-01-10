@@ -42,6 +42,11 @@ find_package(Ceres REQUIRED)
 find_package(tsl-robin-map REQUIRED)
 find_package(glog REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(OpenMp)
+if(OPENMP_FOUND)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+endif()
 
 add_message_files(
         FILES
@@ -136,7 +141,19 @@ target_link_libraries(lidar_odometry_voxelmap
         ${CERES_LIBRARIES}
         ${Sophus_LIBRARIES}
         tsl::robin_map
-        OpenMP::OpenMP_CXX
+        #OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
+        )
+
+add_executable(lidar_odometry_opt src/test/lidar_odometry_opt.cpp )
+target_link_libraries(lidar_odometry_opt
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        #OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
         )
 
 add_executable(lidar_odometry_voxelmapMultiMode src/lidar_odometry_voxelmapMultiMode.cpp)

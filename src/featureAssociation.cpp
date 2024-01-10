@@ -1778,25 +1778,25 @@ public:
 
     void publishOdometry(){
 
-        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformSum[0], transformSum[1], transformSum[2]);
-
-        laserOdometry.header.stamp = cloudHeader.stamp;
-        laserOdometry.pose.pose.orientation.x = geoQuat.x;
-        laserOdometry.pose.pose.orientation.y = geoQuat.y;
-        laserOdometry.pose.pose.orientation.z = geoQuat.z;
-        laserOdometry.pose.pose.orientation.w = geoQuat.w;
-        laserOdometry.pose.pose.position.x = transformSum[3];
-        laserOdometry.pose.pose.position.y = transformSum[4];
-        laserOdometry.pose.pose.position.z = transformSum[5];
-        pubLaserOdometry.publish(laserOdometry);
-
-//        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformCur[2], -transformCur[0], -transformCur[1]);
+//        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformSum[0], transformSum[1], transformSum[2]);
 //
 //        laserOdometry.header.stamp = cloudHeader.stamp;
-//        laserOdometry.pose.pose.orientation.x = -geoQuat.y;
-//        laserOdometry.pose.pose.orientation.y = -geoQuat.z;
-//        laserOdometry.pose.pose.orientation.z = geoQuat.x;
+//        laserOdometry.pose.pose.orientation.x = geoQuat.x;
+//        laserOdometry.pose.pose.orientation.y = geoQuat.y;
+//        laserOdometry.pose.pose.orientation.z = geoQuat.z;
 //        laserOdometry.pose.pose.orientation.w = geoQuat.w;
+//        laserOdometry.pose.pose.position.x = transformSum[3];
+//        laserOdometry.pose.pose.position.y = transformSum[4];
+//        laserOdometry.pose.pose.position.z = transformSum[5];
+//        pubLaserOdometry.publish(laserOdometry);
+
+        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformCur[2], -transformCur[0], -transformCur[1]);
+
+        laserOdometry.header.stamp = cloudHeader.stamp;
+        laserOdometry.pose.pose.orientation.x = -geoQuat.y;
+        laserOdometry.pose.pose.orientation.y = -geoQuat.z;
+        laserOdometry.pose.pose.orientation.z = geoQuat.x;
+        laserOdometry.pose.pose.orientation.w = geoQuat.w;
         //
 //        geometry_msgs::Quaternion geoQuat = tf::createQuaternionMsgFromRollPitchYaw(transformCur[0], transformCur[1], transformCur[2]);
 //
@@ -1805,10 +1805,10 @@ public:
 //        laserOdometry.pose.pose.orientation.y = geoQuat.y;
 //        laserOdometry.pose.pose.orientation.z = geoQuat.z;
 //        laserOdometry.pose.pose.orientation.w = geoQuat.w;
-//        laserOdometry.pose.pose.position.x = transformCur[3];
-//        laserOdometry.pose.pose.position.y = transformCur[4];
-//        laserOdometry.pose.pose.position.z = transformCur[5];
-//        pubLaserOdometry.publish(laserOdometry);
+        laserOdometry.pose.pose.position.x = transformCur[3];
+        laserOdometry.pose.pose.position.y = transformCur[4];
+        laserOdometry.pose.pose.position.z = transformCur[5];
+        pubLaserOdometry.publish(laserOdometry);
 ////      to see the init guess
 //        laserOdometryTrans.stamp_ = cloudHeader.stamp;
 //        laserOdometryTrans.setRotation(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w));

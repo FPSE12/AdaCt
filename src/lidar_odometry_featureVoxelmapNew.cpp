@@ -21,7 +21,7 @@ const bool timelist(PointXYZIRT &x, PointXYZIRT &y){return x.timestamp < y.times
 
 
 
-class Lidar_preprocess : public configParam
+class Lidar_odo : public configParam
 {
 public:
     ros::Subscriber full_sub;
@@ -97,13 +97,13 @@ public:
     tf::TransformBroadcaster tfBroadcaster;
     tf::StampedTransform laserOdometryTrans;
 
-    Lidar_preprocess()
+    Lidar_odo()
     {
         //ROS_INFO("1");
-        full_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_preprocess::lidarCallback, this);
-        edge_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp",5,&Lidar_preprocess::edgeCallback,this);
-        plane_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_flat",5,&Lidar_preprocess::planeCallback,this);
-        odo_Init = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init",5,&Lidar_preprocess::OdoCallBack,this);
+        full_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_odo::lidarCallback, this);
+        edge_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 5, &Lidar_odo::edgeCallback, this);
+        plane_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 5, &Lidar_odo::planeCallback, this);
+        odo_Init = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &Lidar_odo::OdoCallBack, this);
 
         map_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/global_map",1);
         odo_pub = nh.advertise<nav_msgs::Odometry>("adact/odometry",1);
@@ -677,10 +677,10 @@ int main(int argc, char **argv)
     ROS_INFO("START LIDAR ODOMETRY!");
 
 //
-    Lidar_preprocess lp;
+    Lidar_odo lp;
 //
 //    // // 由于process是循环，如果直接运行，不会进入下面的spin，就不会进入点云回调函数，所以要新开一个线程
-    std::thread process(&Lidar_preprocess::preprocess, &lp);
+    std::thread process(&Lidar_odo::preprocess, &lp);
 //
 //    // // spin才会进入回调函数
     ros::spin();

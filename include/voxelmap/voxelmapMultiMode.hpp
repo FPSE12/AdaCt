@@ -63,7 +63,7 @@ template<class PointT>
      void InsertPointCloud(typename pcl::PointCloud<PointT>::ConstPtr worldCloud, OptPoseMultiMode curr_trans){
 
          frame_count++;
-         frameID_to_frame[frame_count]={worldCloud, curr_trans};
+//         frameID_to_frame[frame_count]={worldCloud, curr_trans};
 
 
          std::set<Voxel> voxels_to_update;
@@ -100,12 +100,12 @@ template<class PointT>
 
          }
 
-         frame_indices.push_back(frame_count-1);
-         while(frame_indices.size()>max_frames_to_keep){
-             auto old_idx=frame_indices.front();
-             frame_indices.pop_front();
-             frameID_to_frame[old_idx].pointCloud = nullptr;
-         }
+//         frame_indices.push_back(frame_count-1);
+//         while(frame_indices.size()>max_frames_to_keep){
+//             auto old_idx=frame_indices.front();
+//             frame_indices.pop_front();
+//             frameID_to_frame[old_idx].pointCloud = nullptr;
+//         }
          return;
      }
 

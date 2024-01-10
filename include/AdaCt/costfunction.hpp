@@ -60,6 +60,18 @@ private:
 };
 
 
+struct  ConstantVelocitySEO3{
+    ConstantVelocitySEO3(const Sophus::Vector3d &previous_vel, double beta): previous_velocity_(previous_vel), beta_(beta){}
+
+    template<typename T>
+    bool operator()(const T * const begin_T, const  T *const end_T, T * residual) const{
+
+    }
+private:
+    Sophus::Vector3d previous_velocity_;
+    double beta_=1.0;
+};
+
 struct MultiModeConstantVelocity{
     MultiModeConstantVelocity(const Eigen::Vector3d &previoud_velocity, double beta ):previou_velocity_(previoud_velocity),beta_(beta){}
 

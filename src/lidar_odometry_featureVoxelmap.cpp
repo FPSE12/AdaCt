@@ -18,7 +18,7 @@ const bool timelist(PointXYZIRT &x, PointXYZIRT &y){return x.timestamp < y.times
 
 
 
-class Lidar_preprocess : public configParam
+class Lidar_odo : public configParam
 {
 public:
     ros::Subscriber full_sub;
@@ -93,13 +93,13 @@ public:
     tf::StampedTransform laserOdometryTrans;
 
 
-    Lidar_preprocess()
+    Lidar_odo()
     {
         //ROS_INFO("1");
-        full_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_preprocess::lidarCallback, this, ros::TransportHints().tcpNoDelay());
-        edge_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp",5,&Lidar_preprocess::edgeCallback,this,ros::TransportHints().tcpNoDelay());
-        plane_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_flat",5,&Lidar_preprocess::planeCallback,this, ros::TransportHints().tcpNoDelay());
-        odo_Init = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init",5,&Lidar_preprocess::OdoCallBack,this,ros::TransportHints().tcpNoDelay());
+        full_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_odo::lidarCallback, this, ros::TransportHints().tcpNoDelay());
+        edge_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 5, &Lidar_odo::edgeCallback, this, ros::TransportHints().tcpNoDelay());
+        plane_sub = nh.subscribe<sensor_msgs::PointCloud2>("/laser_cloud_less_flat", 5, &Lidar_odo::planeCallback, this, ros::TransportHints().tcpNoDelay());
+        odo_Init = nh.subscribe<nav_msgs::Odometry>("/laser_odom_to_init", 5, &Lidar_odo::OdoCallBack, this, ros::TransportHints().tcpNoDelay());
 
         map_pub = nh.advertise<sensor_msgs::PointCloud2>("/adact/global_map",1);
         odo_pub = nh.advertise<nav_msgs::Odometry>("adact/odometry",1);
@@ -177,8 +177,8 @@ public:
             //poses.push_back(curr_frame.pose);
         }else{
             curr_frame.pose.begin_pose = poses.back().end_pose;
-            //curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-            curr_frame.pose.end_pose =  curr_frame.pose.begin_pose*last2curr ;
+            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+//            curr_frame.pose.end_pose =  curr_frame.pose.begin_pose *last2curr;
         }//need init with the curr cloud with last cloud
 
         //curr_frame.downSampleOriCloud();
@@ -340,7 +340,7 @@ public:
             }
 
 
-            ROS_INFO("frame_id:%d",frame_count);
+            ROS_INFO("-------------------------------frame_id:%d",frame_count);
             // get pcl cloud
             headertime = fullCloudQue.front().header.stamp.toSec();
 
@@ -376,7 +376,7 @@ public:
 //                                               odoInitQue.front().pose.pose.orientation.y,  odoInitQue.front().pose.pose.orientation.z);
             Eigen::Vector3d  curr2last_trans(odoInitQue.front().pose.pose.position.x, odoInitQue.front().pose.pose.position.y, odoInitQue.front().pose.pose.position.z);
 //            Eigen::Vector3d curr2last_trans(0,0,0);
-            last2curr = SE3(curr2last_rot,curr2last_trans);
+            last2curr = SE3(curr2last_rot,curr2last_trans).inverse();
 
 
             laserOdometryTrans.stamp_ = ros::Time(headertime);
@@ -442,13 +442,15 @@ public:
 
             Initframe();
             auto initframe_end = std::chrono::steady_clock::now();
-
+            double init_cost = std::chrono::duration<double, std::milli>(initframe_end-initframe_start).count();
             if(debug_print) {
-                ROS_INFO("INIT COST: %f ms", std::chrono::duration<double, std::milli>(initframe_end-initframe_start).count());
+                ROS_INFO("INIT COST: %f ms", init_cost);
             }
 
-
-            for (int iter_count = 0; iter_count < iter_nums; iter_count++) {
+            int iter_count=0;
+            double find_neighbor=0;
+            double solve_cost=0;
+            for (; iter_count < iter_nums; iter_count++) {
                 //neighbor.clear();//size=0
                 // find correspance
 
@@ -497,8 +499,8 @@ public:
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
                 if (debug_print) {
-                    ROS_INFO("cloud find neighbor COST: %f ms",
-                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
+                    find_neighbor += std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count();
+
                 }
                 //add other constraints
 //                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,3,3>(
@@ -525,8 +527,8 @@ public:
 
                 auto solve_end = std::chrono::steady_clock::now();
                 if (debug_print) {
-                    ROS_INFO("SLOVE COST: %f ms",
-                             std::chrono::duration<double, std::milli>(solve_end - solve_start).count());
+                   solve_cost += std::chrono::duration<double, std::milli>(solve_end - solve_start).count();
+
 
 //                    std::cout<<begin_trans<<"&&"<<end_trans<<endl;
                 }
@@ -549,6 +551,14 @@ public:
 
 
             }
+
+            if(debug_print){
+                ROS_INFO("finish with %d iters.", iter_count);
+                ROS_INFO("cloud find neighbor COST: %f ms",
+                         find_neighbor);
+                ROS_INFO("SLOVE COST: %f ms",
+                         solve_cost);
+            }
 //            EulerAngles end_euler = ToEulerAngles(pre_pose.endQuat());
 //            ROS_INFO("ruler: %f, %f,%f", end_euler.roll, end_euler.pitch, end_euler.yaw);
 
@@ -568,10 +578,11 @@ public:
 
             poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();
-            ROS_INFO("MAP UPDATE COST: %f ms",std::chrono::duration<double,std::milli>(map_end-map_start).count());
+            double map_update = std::chrono::duration<double,std::milli>(map_end-map_start).count();
+            ROS_INFO("MAP UPDATE COST: %f ms",map_update);
             //updateLocalMap(curr_frame,neighbor);
 //            ROS_INFO("MAP SIZE: %d", local_map.size());
-
+            ROS_INFO("ALL COST: %f ms.", init_cost+find_neighbor+solve_cost+map_update);
 
             *edgeGlobalMap += *curr_frame.edge_world;
             *planeGlobalMap += *curr_frame.plane_world;
@@ -678,10 +689,10 @@ int main(int argc, char **argv)
     ROS_INFO("START LIDAR ODOMETRY!");
 
 //
-    Lidar_preprocess lp;
+    Lidar_odo lp;
 //
 //    // // 由于process是循环，如果直接运行，不会进入下面的spin，就不会进入点云回调函数，所以要新开一个线程
-    std::thread process(&Lidar_preprocess::preprocess, &lp);
+    std::thread process(&Lidar_odo::preprocess, &lp);
 //
 //    // // spin才会进入回调函数
     ros::spin();

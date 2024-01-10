@@ -4,7 +4,7 @@
 #include "AdaCt/optPose.hpp"
 #include "voxelmap/voxelmap.hpp"
 
-
+#define DOWNSAMPLE_VOXEL_SIZE 0.6
 
 
 class frame_info
@@ -42,7 +42,7 @@ public:
 
     frame_info(){
         downsampleLeafsize=0.2;
-        voxelSize = 0.5;
+        voxelSize = DOWNSAMPLE_VOXEL_SIZE;
         blind=0.2;
 
         edgeDSsize=0.2;
@@ -269,11 +269,12 @@ public:
             if(dis< blind || !std::isfinite(raw_point(0))|| !std::isfinite(raw_point(1)) || !std::isfinite(raw_point(2))){
                 continue;
             }
-            if(grid.find(voxel)==grid.end()){
-                grid[voxel].addPoint(rawP);
-            }else{
-               grid[voxel].addPoint(rawP);
-            }
+//            if(grid.find(voxel)==grid.end()){
+//                grid[voxel].addPoint(rawP);
+//            }else{
+//               grid[voxel].addPoint(rawP);
+//            }
+            grid[voxel].addPoint(rawP);
         }
         cloud_ori_downsample->clear();
         cloud_ori_downsample->reserve(grid.size());
@@ -375,6 +376,7 @@ public:
         cloud_deskew->clear();
         cloud_deskew->resize(cloud_ori->size());
         for(int i=0;i<cloud_ori->size();i++){
+
             PointXYZIRT temp=cloud_ori->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
@@ -404,7 +406,34 @@ public:
         }
         return;
     }
+    void updateWorldCloud(){
+        cloud_world->clear();
+        //cloud_world->resize(cloud_ori->size());
+        for(int i=0;i<cloud_ori->size();i++){
+            if(cloud_ori->points[i].ring>15){
+                if(i % 5) continue;//20
+            }
+            else {
+                if(i % 50) continue;
+            }
+            PointXYZIRT temp=cloud_ori->points[i];
+            double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
+            SE3 temp_T_world=pose.linearInplote(alpha);
+            V3D temp_P(temp.x,temp.y,temp.z);
+            temp_P=temp_T_world * temp_P;
+
+            temp.x=temp_P[0];
+            temp.y=temp_P[1];
+            temp.z=temp_P[2];
+
+            //千万不能用push_back，会在size的基础上进行增加
+            cloud_world->points.push_back(temp);
+
+
+        }
+        return;
+    }
     void updateFromDownSample(){
         cloud_world->clear();
         cloud_world->resize(cloud_ori_downsample->size());
@@ -481,13 +510,13 @@ public:
             //千万不能用push_back，会在size的基础上进行增加
             plane_world->points[i]=temp;
 
-            temp_P = pose.end_pose.inverse() * temp_P;
-
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            plane_deskew->points[i]=temp;
+//            temp_P = pose.end_pose.inverse() * temp_P;
+//
+//            temp.x=temp_P[0];
+//            temp.y=temp_P[1];
+//            temp.z=temp_P[2];
+//
+//            plane_deskew->points[i]=temp;
         }
         return;
     }
@@ -512,13 +541,13 @@ public:
             //千万不能用push_back，会在size的基础上进行增加
             edge_world->points[i]=temp;
 
-            temp_P = pose.end_pose.inverse() * temp_P;
-
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            edge_deskew->points[i]=temp;
+//            temp_P = pose.end_pose.inverse() * temp_P;
+//
+//            temp.x=temp_P[0];
+//            temp.y=temp_P[1];
+//            temp.z=temp_P[2];
+//
+//            edge_deskew->points[i]=temp;
         }
         return;
     }
