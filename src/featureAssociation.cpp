@@ -1810,10 +1810,10 @@ public:
         laserOdometry.pose.pose.position.z = transformCur[5];
         pubLaserOdometry.publish(laserOdometry);
 ////      to see the init guess
-//        laserOdometryTrans.stamp_ = cloudHeader.stamp;
-//        laserOdometryTrans.setRotation(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w));
-//        laserOdometryTrans.setOrigin(tf::Vector3(transformSum[3], transformSum[4], transformSum[5]));
-//        tfBroadcaster.sendTransform(laserOdometryTrans);
+        laserOdometryTrans.stamp_ = cloudHeader.stamp;
+        laserOdometryTrans.setRotation(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w));
+        laserOdometryTrans.setOrigin(tf::Vector3(transformSum[3], transformSum[4], transformSum[5]));
+        tfBroadcaster.sendTransform(laserOdometryTrans);
     }
 
     void adjustOutlierCloud(){

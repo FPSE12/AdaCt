@@ -29,48 +29,77 @@ struct point2planeFunction
 };
 
 struct LocationConsistency{
-    LocationConsistency(const Eigen::Vector3d previous_location, const double beta):previous_location_(previous_location),beta_(beta){}
+    LocationConsistency(const Eigen::Quaterniond previous_rot,const Eigen::Vector3d previous_location, const double beta):previous_rot_(previous_rot),previous_location_(previous_location),beta_(beta){}
 
     template<typename  T>
-    bool operator()(const T *const location_params, T* residual)const{
-        residual[0]=beta_*(location_params[0]-previous_location_(0,0));
-        residual[1]=beta_*(location_params[1]-previous_location_(1,0));
-        residual[2]=beta_*(location_params[2]-previous_location_(2,0));
+    bool operator()(const T * const rot_params,const T *const location_params, T* residual)const{
+        Eigen::Map<Eigen::Quaternion<T>> rot_(const_cast<T *>(rot_params));
+        Eigen::Map<Eigen::Matrix<T,3,1>> location_(const_cast<T *>(location_params));
+
+        Eigen::Quaternion<T> delta_rot =  previous_rot_.conjugate().template cast<T>() * rot_;
+        Eigen::Matrix<T,3,1> delta_trans = previous_rot_.conjugate().template cast<T>() * (location_ - previous_location_.template cast<T>());
+
+        Eigen::Map<Eigen::Matrix<T,6,1>> residual_map(residual);
+        residual_map.template block<3,1>(0,0) = delta_trans * T(beta_);
+        residual_map.template block<3,1>(3,0) = delta_rot.vec() * T(beta_);
         return true;
     }
 
 private:
+    Eigen::Quaterniond previous_rot_;
     Eigen::Vector3d previous_location_;
-    double beta_ =1.0;
+    double beta_;
 };
 
 struct ConstantVelocity{
-    ConstantVelocity(const Eigen::Vector3d &previoud_velocity, double beta ):previou_velocity_(previoud_velocity),beta_(beta){}
+    ConstantVelocity(const Eigen::Vector3d &previous_velocity, double beta ): previous_velocity_(previous_velocity), beta_(beta){}
 
     template<typename T>
     bool operator()(const T * const begin_t, const T *const end_t, T * residual) const{
-        residual[0]=beta_*(end_t[0]-begin_t[0]-previou_velocity_(0,0));
-        residual[1]=beta_*(end_t[1]-begin_t[1]-previou_velocity_(1,0));
-        residual[2]=beta_*(end_t[2]-begin_t[2]-previou_velocity_(2,0));
+        residual[0]=beta_*(end_t[0] - begin_t[0] - previous_velocity_(0, 0));
+        residual[1]=beta_*(end_t[1] - begin_t[1] - previous_velocity_(1, 0));
+        residual[2]=beta_*(end_t[2] - begin_t[2] - previous_velocity_(2, 0));
         return true;
     }
 private:
-    Eigen::Vector3d previou_velocity_;
+    Eigen::Vector3d previous_velocity_;
     double beta_=1.0;
 };
 
-
-struct  ConstantVelocitySEO3{
-    ConstantVelocitySEO3(const Sophus::Vector3d &previous_vel, double beta): previous_velocity_(previous_vel), beta_(beta){}
+struct ConstantVelocityRotTran{
+    ConstantVelocityRotTran(const Eigen::Quaterniond & pre_delta_rot, const Eigen::Vector3d  &pre_delta_trans, const double beta):
+    pre_delta_rot_(pre_delta_rot),pre_delta_trans_(pre_delta_trans),beta_(beta){}
 
     template<typename T>
-    bool operator()(const T * const begin_T, const  T *const end_T, T * residual) const{
+    bool operator()(const T *const begin_rot,
+                    const T *const end_rot, const T * const begin_trans,  const T * const end_trans, T * residual) const {
+        Eigen::Map<Eigen::Quaternion<T>> quat_begin(const_cast<T *>(begin_rot));
+        Eigen::Map<Eigen::Quaternion<T>> quat_end(const_cast<T *>(end_rot));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_begin(const_cast<T *>(begin_trans));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_end(const_cast<T *>(end_trans));
 
+        //curr velocity
+        Eigen::Quaternion<T> quat_delta = quat_begin.conjugate() * quat_end;
+        quat_delta.normalize();
+        Eigen::Matrix<T,3,1> tran_delta = quat_begin.conjugate() * trans_end - quat_begin.conjugate()* trans_begin;
+
+        //velocity consistant
+        Eigen::Quaternion<T> delta_quat = quat_delta.conjugate() * pre_delta_rot_.template cast<T>();//must change to T
+        delta_quat.normalize();
+        Eigen::Matrix<T,3,1> delta_trans = quat_delta.conjugate()*pre_delta_trans_.template cast<T>()-quat_delta.conjugate()*tran_delta;
+
+        Eigen::Map<Eigen::Matrix<T, 6, 1>> residual_map(residual);
+        residual_map.template block<3,1>(0,0) = delta_trans *T(beta_);
+        residual_map.template block<3,1>(3,0) = delta_quat.vec() *T(beta_);
+        return true;
     }
+
 private:
-    Sophus::Vector3d previous_velocity_;
-    double beta_=1.0;
+    double beta_;
+    Eigen::Quaterniond pre_delta_rot_;
+    Eigen::Vector3d pre_delta_trans_;
 };
+
 
 struct MultiModeConstantVelocity{
     MultiModeConstantVelocity(const Eigen::Vector3d &previoud_velocity, double beta ):previou_velocity_(previoud_velocity),beta_(beta){}

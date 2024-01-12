@@ -186,7 +186,81 @@ public:
         curr_frame.setFeaturecloud(edge,plane);
         curr_frame.grid_sample_feature();
 
-        curr_frame.updateFeature();
+        //curr_frame.updateFeature();
+    }
+
+    bool SearchNeighbor_(const Voxelmap<PointXYZIRT> &local_map, const Eigen::Vector3d & PointW,
+                         double searchThreshold, VoxelBlock<PointXYZIRT> & neighbor){
+//        Eigen::Vector3d PointW_(PointW.x, PointW.y,PointW.z);
+
+        Voxel voxel = Voxel::Coordinates(PointW,MAP_VOXEL_SIZE);
+        int kx=voxel.x;
+        int ky=voxel.y;
+        int kz=voxel.z;
+
+        Neighbors_queue neighborsQueue;
+
+        for(int kxx=kx-1;kxx<kx+1+1;++kxx){
+            for(int kyy=ky-1;kyy<ky+1+1;++kyy){
+                for(int kzz=kz-1;kzz<kz+1+1;++kzz){
+                    voxel.x=kxx;
+                    voxel.y=kyy;
+                    voxel.z=kzz;
+
+                    auto search = local_map.map.find(voxel);
+                    if(search != local_map.map.end()){
+                        auto & voxel_block = search.value();
+
+                        for(int i=0;i<voxel_block.points.size();i++){
+                            Eigen::Vector3d neighbor(voxel_block.points[i].x,voxel_block.points[i].y,voxel_block.points[i].z);
+
+                            double dis=(PointW-neighbor).norm();
+                            //ROS_INFO("DIS:%f,",dis);
+//                            if(dis<searchThreshold){
+                            if(neighborsQueue.size() == max_neighbor_nums){
+                                if(dis < std::get<0>(neighborsQueue.top())){
+                                    neighborsQueue.pop();
+
+                                    neighborsQueue.emplace(dis,neighbor,voxel);
+
+
+                                }
+                            }else{
+
+                                neighborsQueue.emplace(dis,neighbor,voxel);
+
+                            }
+//                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        if(neighborsQueue.size() >= max_neighbor_nums ){//estiplane?
+
+            while(!neighborsQueue.empty()){
+//                 Eigen::Vector3d temp;
+//                 temp[0]=std::get<1>(neighborsQueue.top()).x();
+//                 temp[1]=std::get<1>(neighborsQueue.top()).y();
+//                 temp[2]=std::get<1>(neighborsQueue.top()).z();
+                //neighbor.push_back(temp);
+
+                PointXYZIRT temp;
+                temp.x=std::get<1>(neighborsQueue.top()).x();
+                temp.y=std::get<1>(neighborsQueue.top()).y();
+                temp.z=std::get<1>(neighborsQueue.top()).z();
+                neighbor.points.push_back(temp);
+                neighborsQueue.pop();
+            }
+//                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
+
+            return true;
+        }
+
+        return false;
+
     }
 
     void AddEdgeProblem(ceres::Problem &problem, ceres::LossFunction *loss_function,Eigen::Quaterniond &begin_quat, Eigen::Quaterniond &end_quat, Eigen::Vector3d & begin_trans, Eigen::Vector3d & end_trans){
@@ -233,25 +307,30 @@ public:
 //                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
 //                }
 //            }
-
+            Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
             Eigen::Vector3d sensorlocation= (1-alpha) * begin_trans + alpha * end_trans;
-            if(feature_map.NeighborSearch(curr_frame.edge_world->points[i],sensorlocation,1,neighbor,pabcd)){
+            SE3 temp_T_world=curr_frame.pose.linearInplote(alpha);
+            Eigen::Vector3d world_point = temp_T_world * curr_point;
+            if(SearchNeighbor_(feature_map,world_point,1,neighbor)){
 
                 opt_edge_num++;
                 neighbor.computeDescription(A2D | NORMAL);
+                if(neighbor.description.normal.dot(begin_trans-curr_point)<0){
+                    neighbor.description.normal = -1.0 * neighbor.description.normal;
+                }
 //                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
 //                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
                 double weight =neighbor.description.a2D;
 //                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
 //                                new CTFunctor(alpha, raw_point, pabcd, weight));
-                Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
+
                 ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
-                        new CTFunctor2(alpha, curr_point, getPointXYZ(neighbor.points[0]), weight,neighbor.description.normal));
+                        new CTFunctor2(alpha, curr_point, getPointXYZ(neighbor.points.back()), weight,neighbor.description.normal));
 
                 problem.AddResidualBlock(cost_function,
                                          loss_function,
                                          begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-                cloud_valid->push_back(curr_frame.edge_world->points[i]);
+                //cloud_valid->push_back(curr_frame.edge_world->points[i]);
             }
             //build point2line distance
 
@@ -303,23 +382,30 @@ public:
 //                }
 //
 //            }
+            Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
             Eigen::Vector3d sensorlocation= (1-alpha) * begin_trans + alpha * end_trans;
-            if( feature_map.NeighborSearch(curr_frame.plane_world->points[i],sensorlocation,0.8,neighbor,pabcd)){
+            SE3 temp_T_world=curr_frame.pose.linearInplote(alpha);
+            Eigen::Vector3d world_point = temp_T_world * curr_point;
+            if( SearchNeighbor_(feature_map,world_point,0.8,neighbor)){
+
                 opt_plane_num++;
                 neighbor.computeDescription(A2D | NORMAL);
+                if(neighbor.description.normal.dot(begin_trans-curr_point)<0){
+                    neighbor.description.normal = -1.0 * neighbor.description.normal;
+                }
 //                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
 //                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
                 double weight =neighbor.description.a2D;
 //                        ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
 //                                new CTFunctor(alpha, raw_point, pabcd, weight));
-                Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
+
                 ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
-                        new CTFunctor2(alpha, curr_point, getPointXYZ(neighbor.points[0]), weight,neighbor.description.normal));
+                        new CTFunctor2(alpha, curr_point, getPointXYZ(neighbor.points.back()), weight,neighbor.description.normal));
 
                 problem.AddResidualBlock(cost_function,
                                          loss_function,
                                          begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-                cloud_valid->push_back(curr_frame.plane_world->points[i]);
+               // cloud_valid->push_back(curr_frame.plane_world->points[i]);
 
             }
 
@@ -495,7 +581,7 @@ public:
 
 
                 tfBroadcaster.sendTransform(laserOdometryTrans);
-                publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"map");
+                //publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"map");
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
                 if (debug_print) {
@@ -536,7 +622,7 @@ public:
                 begin_quat.normalize();
                 end_quat.normalize();
                 curr_frame.setMotion(begin_quat, end_quat, begin_trans, end_trans);
-                curr_frame.updateFeature();
+                //curr_frame.updateFeature();
                 //curr_frame.normalize();
 
                 //curr_frame.update();
@@ -570,6 +656,7 @@ public:
 //            plane_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
 //            plane_map.InsertPointCloud(curr_frame.plane_world,curr_frame.pose);
 
+            curr_frame.updateFeature();
             feature_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
             *features = *curr_frame.edge_world+ *curr_frame.plane_world;
             feature_map.InsertPointCloud(features,curr_frame.pose);

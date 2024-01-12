@@ -5,6 +5,8 @@
 #include "voxelmap/voxelmap.hpp"
 
 #define DOWNSAMPLE_VOXEL_SIZE 0.6
+#define DOWNSAMPLE_EDGE_VOXEL_SIZE 0.2
+#define DOWNSAMPLE_PLANE_VOXEL_SIZE 0.4
 
 
 class frame_info
@@ -45,8 +47,8 @@ public:
         voxelSize = DOWNSAMPLE_VOXEL_SIZE;
         blind=0.2;
 
-        edgeDSsize=0.2;
-        planeDSsize=0.4;
+        edgeDSsize=DOWNSAMPLE_EDGE_VOXEL_SIZE;
+        planeDSsize=DOWNSAMPLE_PLANE_VOXEL_SIZE;
 
         pose.initialMotion();
 
@@ -255,18 +257,18 @@ public:
 
     void grid_sample_mid(){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
-        grid.reserve(size_t(cloud_ori->size()));
+        //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
         //int blind_voxel=ceil(blind/voxelSize);
-        for(int i=0;i<cloud_ori->size();i++){
-            PointXYZIRT rawP = cloud_ori->points[i];
-            Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
-            double timestamp = cloud_ori->points[i].timestamp;
-            double dis = raw_point.norm();
-            voxel.x = static_cast<short>(cloud_ori->points[i].x / voxelSize);
-            voxel.y = static_cast<short>(cloud_ori->points[i].y / voxelSize);
-            voxel.z = static_cast<short>(cloud_ori->points[i].z / voxelSize);
-            if(dis< blind || !std::isfinite(raw_point(0))|| !std::isfinite(raw_point(1)) || !std::isfinite(raw_point(2))){
+        for(auto point : cloud_ori->points){
+            //PointXYZIRT rawP = cloud_ori->points[i];
+            //Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
+            //double timestamp = cloud_ori->points[i].timestamp;
+            double dis = point.x * point.x + point.y * point.y + point.z * point.z;
+            voxel.x = static_cast<short>(point.x / voxelSize);
+            voxel.y = static_cast<short>(point.y / voxelSize);
+            voxel.z = static_cast<short>(point.z / voxelSize);
+            if(dis< blind || !std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
                 continue;
             }
 //            if(grid.find(voxel)==grid.end()){
@@ -274,10 +276,10 @@ public:
 //            }else{
 //               grid[voxel].addPoint(rawP);
 //            }
-            grid[voxel].addPoint(rawP);
+            grid[voxel].addPoint(point);
         }
         cloud_ori_downsample->clear();
-        cloud_ori_downsample->reserve(grid.size());
+        //cloud_ori_downsample->reserve(grid.size());
         for(const auto &[_,voxel_block] : grid) {
             //cloud_ori_downsample->points.push_back(point);
 
@@ -409,14 +411,16 @@ public:
     void updateWorldCloud(){
         cloud_world->clear();
         //cloud_world->resize(cloud_ori->size());
-        for(int i=0;i<cloud_ori->size();i++){
-            if(cloud_ori->points[i].ring>15){
-                if(i % 5) continue;//20
+        int count=0;
+        for(auto point : cloud_ori->points){
+            count++;
+            if(point.ring>15){
+                if(count % 10) continue;//20
             }
             else {
-                if(i % 50) continue;
+                if(count % 50) continue;
             }
-            PointXYZIRT temp=cloud_ori->points[i];
+            PointXYZIRT temp=point;
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
             SE3 temp_T_world=pose.linearInplote(alpha);
@@ -491,12 +495,11 @@ public:
     }
 
     void updatePlaneFeature(){
-        plane_deskew->clear();
-        plane_deskew->resize(planeDS->size());
+
         plane_world->clear();
-        plane_world->resize(planeDS->size());
-        for(int i=0;i<planeDS->size();i++){
-            PointXYZIRT temp=planeDS->points[i];
+
+        for(int i=0;i<plane->size();i++){
+            PointXYZIRT temp=plane->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
             SE3 temp_T_world=pose.linearInplote(alpha);
@@ -508,7 +511,7 @@ public:
             temp.z=temp_P[2];
 
             //千万不能用push_back，会在size的基础上进行增加
-            plane_world->points[i]=temp;
+            plane_world->push_back(temp);
 
 //            temp_P = pose.end_pose.inverse() * temp_P;
 //
@@ -522,12 +525,10 @@ public:
     }
 
     void updateEdgeFeature(){
-        edge_deskew->clear();
-        edge_deskew->resize(edgeDS->size());
+
         edge_world->clear();
-        edge_world->resize(edgeDS->size());
-        for(int i=0;i<edgeDS->size();i++){
-            PointXYZIRT temp=edgeDS->points[i];
+        for(int i=0;i<edge->size();i++){
+            PointXYZIRT temp=edge->points[i];
             double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
 
             SE3 temp_T_world=pose.linearInplote(alpha);
@@ -539,7 +540,7 @@ public:
             temp.z=temp_P[2];
 
             //千万不能用push_back，会在size的基础上进行增加
-            edge_world->points[i]=temp;
+            edge_world->push_back(temp);
 
 //            temp_P = pose.end_pose.inverse() * temp_P;
 //

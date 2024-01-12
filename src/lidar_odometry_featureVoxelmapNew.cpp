@@ -84,8 +84,8 @@ public:
 
     // map
     //Voxelmap<PointXYZIRT> local_map;
-    VoxelmapNoProperty<PointXYZIRT> edge_map;
-    VoxelmapNoProperty<PointXYZIRT> plane_map;
+    Voxelmap<PointXYZIRT> edge_map;
+    Voxelmap<PointXYZIRT> plane_map;
 //    Voxelmap<PointXYZIRT> feature_map;
     // opt pose
 //    OptPose pre_pose, curr_pose;
@@ -128,7 +128,7 @@ public:
         first_flag = true;
         frame_count =-1;
 
-        iter_nums =5;
+        iter_nums =10;
 
         fullCloudQue.clear();
         edgeCloudQue.clear();
@@ -184,8 +184,8 @@ public:
         }else{
             curr_frame.pose.begin_pose = poses.back().end_pose;
 //            //curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-//            curr_frame.pose.end_pose =curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-            curr_frame.pose.end_pose =curr_frame.pose.begin_pose *last2curr;
+            curr_frame.pose.end_pose =curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+            //curr_frame.pose.end_pose =curr_frame.pose.begin_pose *last2curr;
         }//need init with the curr cloud with last cloud
 
         //curr_frame.downSampleOriCloud();
@@ -194,6 +194,81 @@ public:
         curr_frame.grid_sample_feature();
 
         //curr_frame.updateFeature();
+    }
+
+
+    bool SearchNeighbor_(const Voxelmap<PointXYZIRT> &local_map, const Eigen::Vector3d & PointW,
+                         double searchThreshold, VoxelBlock<PointXYZIRT> & neighbor, int neighbor_nums){
+//        Eigen::Vector3d PointW_(PointW.x, PointW.y,PointW.z);
+
+        Voxel voxel = Voxel::Coordinates(PointW,MAP_VOXEL_SIZE);
+        int kx=voxel.x;
+        int ky=voxel.y;
+        int kz=voxel.z;
+
+        Neighbors_queue neighborsQueue;
+
+        for(int kxx=kx-1;kxx<kx+1+1;++kxx){
+            for(int kyy=ky-1;kyy<ky+1+1;++kyy){
+                for(int kzz=kz-1;kzz<kz+1+1;++kzz){
+                    voxel.x=kxx;
+                    voxel.y=kyy;
+                    voxel.z=kzz;
+
+                    auto search = local_map.map.find(voxel);
+                    if(search != local_map.map.end()){
+                        auto & voxel_block = search.value();
+
+                        for(int i=0;i<voxel_block.points.size();i++){
+                            Eigen::Vector3d neighbor(voxel_block.points[i].x,voxel_block.points[i].y,voxel_block.points[i].z);
+
+                            double dis=(PointW-neighbor).norm();
+                            //ROS_INFO("DIS:%f,",dis);
+//                            if(dis<searchThreshold){
+                            if(neighborsQueue.size() == max_neighbor_nums){
+                                if(dis < std::get<0>(neighborsQueue.top())){
+                                    neighborsQueue.pop();
+
+                                    neighborsQueue.emplace(dis,neighbor,voxel);
+
+
+                                }
+                            }else{
+
+                                neighborsQueue.emplace(dis,neighbor,voxel);
+
+                            }
+//                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        if(neighborsQueue.size() >= max_neighbor_nums ){//estiplane?
+
+            while(!neighborsQueue.empty()){
+//                 Eigen::Vector3d temp;
+//                 temp[0]=std::get<1>(neighborsQueue.top()).x();
+//                 temp[1]=std::get<1>(neighborsQueue.top()).y();
+//                 temp[2]=std::get<1>(neighborsQueue.top()).z();
+                //neighbor.push_back(temp);
+
+                PointXYZIRT temp;
+                temp.x=std::get<1>(neighborsQueue.top()).x();
+                temp.y=std::get<1>(neighborsQueue.top()).y();
+                temp.z=std::get<1>(neighborsQueue.top()).z();
+                neighbor.points.push_back(temp);
+                neighborsQueue.pop();
+            }
+//                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
+
+            return true;
+        }
+
+        return false;
+
     }
 
     void AddEdgeProblem(ceres::Problem &problem, ceres::LossFunction *loss_function,Eigen::Quaterniond &begin_quat, Eigen::Quaterniond &end_quat, Eigen::Vector3d & begin_trans, Eigen::Vector3d & end_trans){
@@ -206,54 +281,56 @@ public:
             VoxelBlock<PointXYZIRT> neighbor;
             Eigen::Vector4d pabcd;
             Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
-            if(edge_map.NeighborSearchEstiPlane(curr_frame.edge_world->points[i],0.8,pabcd)) {
-
-                opt_edge_num++;
-                ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
-                                new CTFunctor(alpha, curr_point, pabcd, 1.0));
-                problem.AddResidualBlock(cost_function,
-                                         loss_function,
-                                         begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-
-                validEdge->push_back(curr_frame.edge_world->points[i]);
-            }
-//            if(edge_map.NeighborSearch(curr_frame.edge_world->points[i],1,neighbor)){
+            SE3 temp_T_world=curr_frame.pose.linearInplote(alpha);
+            Eigen::Vector3d world_point = temp_T_world * curr_point;
+//            if(edge_map.NeighborSearchEstiPlane(curr_frame.edge_world->points[i],0.8,pabcd)) {
 //
-//                //opt_edge_num++;
-//                std::vector<Eigen::Vector3d> nearCorners;
-//                Eigen::Vector3d center(0, 0, 0);
-//                for(int i=0;i<neighbor.points.size();i++){
-//                    Eigen::Vector3d tmp(neighbor.points[i].x,neighbor.points[i].y,neighbor.points[i].z);
-//                    center =center+tmp;
-//                    nearCorners.push_back(tmp);
-//                }
+//                opt_edge_num++;
+//                ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
+//                                new CTFunctor(alpha, curr_point, pabcd, 1.0));
+//                problem.AddResidualBlock(cost_function,
+//                                         loss_function,
+//                                         begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
 //
-//                center=center/5.0;
-//                Eigen::Matrix3d covMat = Eigen::Matrix3d::Zero();
-//                for (int j = 0; j < 5; j++)
-//                {
-//                    Eigen::Matrix<double, 3, 1> tmpZeroMean = nearCorners[j] - center;
-//                    covMat = covMat + tmpZeroMean * tmpZeroMean.transpose();
-//                }
-//
-//                Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> saes(covMat);
-//                Eigen::Vector3d unit_direction = saes.eigenvectors().col(2);
-//                Eigen::Vector3d curr_point(raw_point.x, raw_point.y, raw_point.z);
-//                if (saes.eigenvalues()[2] > 3 * saes.eigenvalues()[1]) {
-//                    opt_edge_num++;
-//                    //取两个对应角点a,b
-//                    Eigen::Vector3d point_on_line = center;
-//                    Eigen::Vector3d point_a, point_b;
-//                    point_a = 0.1 * unit_direction + point_on_line;
-//                    point_b = -0.1 * unit_direction + point_on_line;
-//
-//                    ceres::CostFunction *cost_function = LidarEdgeFactor::Create(curr_point, point_a, point_b, 1.0,alpha);
-//
-//                    problem.AddResidualBlock(cost_function, loss_function,
-//                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-//                    validEdge->push_back(curr_frame.edge_world->points[i]);
-//                }
+//                validEdge->push_back(curr_frame.edge_world->points[i]);
 //            }
+            if(SearchNeighbor_(edge_map,world_point,1,neighbor,5)){
+
+                //opt_edge_num++;
+                std::vector<Eigen::Vector3d> nearCorners;
+                Eigen::Vector3d center(0, 0, 0);
+                for(int i=0;i<neighbor.points.size();i++){
+                    Eigen::Vector3d tmp(neighbor.points[i].x,neighbor.points[i].y,neighbor.points[i].z);
+                    center =center+tmp;
+                    nearCorners.push_back(tmp);
+                }
+
+                center=center/5.0;
+                Eigen::Matrix3d covMat = Eigen::Matrix3d::Zero();
+                for (int j = 0; j < 5; j++)
+                {
+                    Eigen::Matrix<double, 3, 1> tmpZeroMean = nearCorners[j] - center;
+                    covMat = covMat + tmpZeroMean * tmpZeroMean.transpose();
+                }
+
+                Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> saes(covMat);
+                Eigen::Vector3d unit_direction = saes.eigenvectors().col(2);
+                Eigen::Vector3d curr_point(raw_point.x, raw_point.y, raw_point.z);
+                if (saes.eigenvalues()[2] > 3 * saes.eigenvalues()[1]) {
+                    opt_edge_num++;
+                    //取两个对应角点a,b
+                    Eigen::Vector3d point_on_line = center;
+                    Eigen::Vector3d point_a, point_b;
+                    point_a = 0.1 * unit_direction + point_on_line;
+                    point_b = -0.1 * unit_direction + point_on_line;
+
+                    ceres::CostFunction *cost_function = LidarEdgeFactor::Create(curr_point, point_a, point_b, 1.0,alpha);
+
+                    problem.AddResidualBlock(cost_function, loss_function,
+                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+                    //validEdge->push_back(curr_frame.edge_world->points[i]);
+                }
+            }
         }
        // pcl::copyPointCloud(*validEdge,*curr_frame.edgeDS);
     }
@@ -268,55 +345,57 @@ public:
             VoxelBlock<PointXYZIRT> neighbor;
             Eigen::Vector4d pabcd;
             Eigen::Vector3d curr_point(raw_point.x,raw_point.y,raw_point.z);
-            if(plane_map.NeighborSearchEstiPlane(curr_frame.plane_world->points[i],0.8,pabcd)){
-                opt_plane_num++;
-                ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
-                        new CTFunctor(alpha, curr_point, pabcd, 1.0));
-                problem.AddResidualBlock(cost_function,
-                                         loss_function,
-                                         begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-
-                validPlane->push_back(curr_frame.plane_world->points[i]);
-            }
-
-//            if( plane_map.NeighborSearch(curr_frame.plane_world->points[i],1,neighbor)){
-//                bool planeValid=true;
-//                Eigen::Matrix<double, 5, 3> matA0;
-//                Eigen::Matrix<double, 5, 1> matB0 = -1 * Eigen::Matrix<double, 5, 1>::Ones();
-//                for (int j = 0; j < 5; j++)
-//                {
-//                    matA0(j, 0) = neighbor.points[j].x;
-//                    matA0(j, 1) = neighbor.points[j].y;
-//                    matA0(j, 2) = neighbor.points[j].z;
-//                    //printf(" pts %f %f %f ", matA0(j, 0), matA0(j, 1), matA0(j, 2));
-//                }
-//                Eigen::Vector3d norm = matA0.colPivHouseholderQr().solve(matB0);
-//                double negative_OA_dot_norm = 1 / norm.norm();
-//                norm.normalize();
-//                for (int j = 0; j < 5; j++)
-//                {
-//                    // if OX * n > 0.2, then plane is not fit well
-//                    //计算每个点到最小二乘拟合平面的距离，距离过大则平面不够平
-//                    if (fabs(norm(0) * neighbor.points[j].x +
-//                             norm(1) * neighbor.points[j].y +
-//                             norm(2) * neighbor.points[j].z + negative_OA_dot_norm) > 0.2)
-//                    {
-//                        //std::cout<<"plan not flat"<<std::endl;
-//                        planeValid = false;
-//                        break;
-//                    }
-//                }
-//                if(planeValid){
-//                    validPlane->push_back(raw_point);
-//                    Eigen::Vector3d curr_point(raw_point.x, raw_point.y, raw_point.z);
-//                    ceres::CostFunction *cost_function = LidarPlaneNormFactor::Create(curr_point, norm, negative_OA_dot_norm, alpha);
-//                    problem.AddResidualBlock(cost_function, loss_function,
-//                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-//                    opt_plane_num++;
-//                    validPlane->push_back(curr_frame.plane_world->points[i]);
-//                }
+            SE3 temp_T_world=curr_frame.pose.linearInplote(alpha);
+            Eigen::Vector3d world_point = temp_T_world * curr_point;
+//            if(plane_map.NeighborSearchEstiPlane(curr_frame.plane_world->points[i],0.8,pabcd)){
+//                opt_plane_num++;
+//                ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
+//                        new CTFunctor(alpha, curr_point, pabcd, 1.0));
+//                problem.AddResidualBlock(cost_function,
+//                                         loss_function,
+//                                         begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
 //
+//                validPlane->push_back(curr_frame.plane_world->points[i]);
 //            }
+
+            if( SearchNeighbor_(plane_map,world_point,1,neighbor,5)){
+                bool planeValid=true;
+                Eigen::Matrix<double, 5, 3> matA0;
+                Eigen::Matrix<double, 5, 1> matB0 = -1 * Eigen::Matrix<double, 5, 1>::Ones();
+                for (int j = 0; j < 5; j++)
+                {
+                    matA0(j, 0) = neighbor.points[j].x;
+                    matA0(j, 1) = neighbor.points[j].y;
+                    matA0(j, 2) = neighbor.points[j].z;
+                    //printf(" pts %f %f %f ", matA0(j, 0), matA0(j, 1), matA0(j, 2));
+                }
+                Eigen::Vector3d norm = matA0.colPivHouseholderQr().solve(matB0);
+                double negative_OA_dot_norm = 1 / norm.norm();
+                norm.normalize();
+                for (int j = 0; j < 5; j++)
+                {
+                    // if OX * n > 0.2, then plane is not fit well
+                    //计算每个点到最小二乘拟合平面的距离，距离过大则平面不够平
+                    if (fabs(norm(0) * neighbor.points[j].x +
+                             norm(1) * neighbor.points[j].y +
+                             norm(2) * neighbor.points[j].z + negative_OA_dot_norm) > 0.2)
+                    {
+                        //std::cout<<"plan not flat"<<std::endl;
+                        planeValid = false;
+                        break;
+                    }
+                }
+                if(planeValid){
+                    validPlane->push_back(raw_point);
+                    Eigen::Vector3d curr_point(raw_point.x, raw_point.y, raw_point.z);
+                    ceres::CostFunction *cost_function = LidarPlaneNormFactor::Create(curr_point, norm, negative_OA_dot_norm, alpha);
+                    problem.AddResidualBlock(cost_function, loss_function,
+                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+                    opt_plane_num++;
+                    //validPlane->push_back(curr_frame.plane_world->points[i]);
+                }
+
+            }
 
         }
 
@@ -334,7 +413,7 @@ public:
                 continue;
             }
 
-            ROS_INFO("frame_id:%d",frame_count);
+            ROS_INFO("-----------------------------------------frame_id:%d",frame_count);
 
             // get pcl cloud
 
@@ -377,8 +456,8 @@ public:
 //            Eigen::Vector3d curr2last_trans(0,0,0);
             last2curr = SE3(curr2last_rot,curr2last_trans);
 
-            ROS_INFO("TIME : %f, %f,%f,%f", cloud_full.header.stamp.toSec(),cloud_edge.header.stamp.toSec(),
-                     cloud_plane.header.stamp.toSec(),odoInitQue.front().header.stamp.toSec());
+//            ROS_INFO("TIME : %f, %f,%f,%f", cloud_full.header.stamp.toSec(),cloud_edge.header.stamp.toSec(),
+//                     cloud_plane.header.stamp.toSec(),odoInitQue.front().header.stamp.toSec());
 
             laserOdometryTrans.stamp_ = ros::Time(headertime);
             laserOdometryTrans.setRotation(tf::Quaternion(x, y, z, w));
@@ -482,7 +561,7 @@ public:
                 opt_plane_num=0;
                 cloud_valid->clear();
 
-                curr_frame.updateFeature();
+                //curr_frame.updateFeature();
                 AddPlaneProblem(problem,loss_function,begin_quat,end_quat,begin_trans,end_trans);
                 AddEdgeProblem(problem,loss_function, begin_quat,end_quat,begin_trans,end_trans);
 
@@ -535,7 +614,7 @@ public:
                 begin_quat.normalize();
                 end_quat.normalize();
                 curr_frame.setMotion(begin_quat, end_quat, begin_trans, end_trans);
-                curr_frame.updateFeature();
+
                 //curr_frame.normalize();
 
                 //curr_frame.update();
@@ -555,6 +634,8 @@ public:
 
             // update local_map
             auto map_start = std::chrono::steady_clock::now();
+            curr_frame.updateFeature();
+
             edge_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
             edge_map.InsertPointCloud(curr_frame.edge_world,curr_frame.pose);
 

@@ -82,8 +82,12 @@ public:
 //
 //    }
     OptPose & operator = (const OptPose & pose){
-        this->begin_pose=pose.begin_pose;
-        this->end_pose=pose.end_pose;
+        if(this != & pose){//防止自赋值！very important
+            this->begin_pose=pose.begin_pose;
+            this->end_pose=pose.end_pose;
+        }
+        return * this;
+
     }
 
     bool compareDiff(const OptPose otherpose){

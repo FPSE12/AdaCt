@@ -140,8 +140,8 @@ struct VoxelBlock{
     PointT findCloseToMid() const {
         double min_dis = std::numeric_limits<double>::max();
         PointT target_min;
-        for(int i=0;i<points.size();i++){
-            auto point=points[i];
+        for(auto point : points){
+//            auto point=points[i];
             double dis = PointDis(point ,mid_point);
 
             if(dis < min_dis){
