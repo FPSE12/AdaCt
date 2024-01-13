@@ -264,7 +264,7 @@ public:
 
     void preprocess()
     {
-        ros::Rate r(100);
+        ros::Rate r(100);//100Hz
 
         while (ros::ok())
         {
@@ -435,19 +435,21 @@ public:
                         double a2d;
                         Eigen::Vector3d normal;
                         computeDistribution(neighbor,a2d,normal);
-                        if(neighbor.description.normal.dot(begin_trans-raw_point)<0){
-                            neighbor.description.normal = -1.0 * neighbor.description.normal;
+                        if(normal.dot(begin_trans-raw_point)<0){
+                            normal = -1.0 * normal;
                         }
 //                        VoxelBlockDescription<double> description= estimateNeighborHood(neighbor, raw_point, begin_trans);
                         auto time4  = std::chrono::steady_clock::now();
 
                         compouteDisatribute += std::chrono::duration<double, std::milli>(time4 - time3).count();
-//                        double weight=0.9*std::pow(neighbor.description.a2D,2)+
-//                                0.1*std::exp(-(getPointXYZ(neighbor.points[0])- getPointXYZ(curr_frame.cloud_world->points[i])).norm()/(0.3*5));
-//                        double dis_point = std::abs((world_point-getPointXYZ(neighbor.points.back())).transpose() * neighbor.description.normal) ;
-//                        if(dis_point<0.1){
+//                        double weight=0.9*a2d*a2d+
+//                                0.1*std::exp(-(getPointXYZ(neighbor.points.back())- world_point).norm()/(0.3*20));
+                        double weight = a2d;
+//                        double dis_point = std::abs((world_point-getPointXYZ(neighbor.points.back())).transpose() * normal) ;
+//                        if(dis_point<0.3){
                             opt_num++;
-                            double weight =a2d;
+
+
 //                         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
 //                                new CTFunctor(alpha, raw_point, pabcd, weight));
 //                            ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
@@ -478,11 +480,11 @@ public:
 //                             compouteDisatribute);
 //                    ROS_INFO("problem make COST: %f ms",
 //                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
-
+//                    ROS_INFO("OPT_NUM:%d",opt_num);
                 }
                 //add other constraints
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
-                        new LocationConsistency(poses.back().endQuat(),poses.back().endTrans(),std::sqrt(opt_num*0.001))),
+                        new LocationConsistency(poses.back().endQuat(),poses.back().endTrans(),std::sqrt(opt_num*0.01))),
                                          nullptr,
                                          begin_quat.coeffs().data(),begin_trans.data()
 
@@ -503,7 +505,7 @@ public:
 //                Eigen::Vector3d pre_trans_delta = delta_pose.translation();
 
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocityRotTran,6,4,4,3,3>(
-                        new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.001))),
+                        new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.01))),
                         nullptr,
                         begin_quat.coeffs().data(),end_quat.coeffs().data(),begin_trans.data(),end_trans.data()
                         );

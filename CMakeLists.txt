@@ -107,7 +107,7 @@ target_link_libraries(featureAssociation
         )
 
 
-add_executable(lidar_odometry src/lidar_odometry.cpp include/ikd-Tree/ikd_Tree.cpp)
+add_executable(lidar_odometry src/old/lidar_odometry.cpp include/ikd-Tree/ikd_Tree.cpp)
 target_link_libraries(lidar_odometry
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
@@ -116,7 +116,7 @@ target_link_libraries(lidar_odometry
         tsl::robin_map
 )
 
-add_executable(lidar_odometry_new src/lidar_odometry_new.cpp include/ikd-Tree/ikd_Tree.cpp)
+add_executable(lidar_odometry_new src/old/lidar_odometry_new.cpp include/ikd-Tree/ikd_Tree.cpp)
 target_link_libraries(lidar_odometry_new
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}
@@ -125,7 +125,7 @@ target_link_libraries(lidar_odometry_new
         tsl::robin_map
         )
 
-add_executable(lidar_odometry_downsample src/lidar_odometry_downsample.cpp include/ikd-Tree/ikd_Tree.cpp)
+add_executable(lidar_odometry_downsample src/old/lidar_odometry_downsample.cpp include/ikd-Tree/ikd_Tree.cpp)
 target_link_libraries(lidar_odometry_downsample
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}
@@ -166,7 +166,7 @@ target_link_libraries(lidar_odometry_voxelmapMultiMode
         OpenMP::OpenMP_CXX
         )
 
-add_executable(lidar_odometry_featureVoxelmap src/lidar_odometry_featureVoxelmap.cpp )
+add_executable(lidar_odometry_featureVoxelmap src/old/lidar_odometry_featureVoxelmap.cpp)
 target_link_libraries(lidar_odometry_featureVoxelmap
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}
@@ -176,7 +176,7 @@ target_link_libraries(lidar_odometry_featureVoxelmap
         OpenMP::OpenMP_CXX
         )
 
-add_executable(lidar_odometry_featureVoxelmapNew src/lidar_odometry_featureVoxelmapNew.cpp )
+add_executable(lidar_odometry_featureVoxelmapNew src/old/lidar_odometry_featureVoxelmapNew.cpp)
 target_link_libraries(lidar_odometry_featureVoxelmapNew
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}

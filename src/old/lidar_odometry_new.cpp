@@ -1,7 +1,7 @@
 #include "AdaCt/utility.h"
 #include "AdaCt/frame_info.hpp"
 #include "AdaCt/costfunction.hpp"
-#include <ikd-Tree/ikd_Tree.h>
+#include "ikd-Tree/ikd_Tree.h"
 
 #define  num_neighbor 5
 //
