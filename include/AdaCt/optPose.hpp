@@ -90,7 +90,7 @@ public:
 
     }
 
-    bool compareDiff(const OptPose otherpose){
+    int compareDiff(const OptPose otherpose){
         Eigen::Quaterniond other_qua=otherpose.end_pose.unit_quaternion();
         Eigen::Quaterniond this_qua=this->end_pose.unit_quaternion();
         double delta_thate = acos(this_qua.dot(other_qua)/(this_qua.norm() * other_qua.norm()));
@@ -99,9 +99,10 @@ public:
         Eigen::Vector3d this_tran = this->endTrans();
         double delta_trans = (other_trans-this_tran).norm();
 
-        if(delta_thate < 0.05 && delta_trans < 0.01) return true;
+        if(delta_thate < 0.05 && delta_trans < 0.01) return 0;
+        if(delta_thate > 5 || delta_trans > 0.5) return 2;//see ct-icp's motion threshold
 
-        return false;
+        return 1;
     }
 
     void normalize(){

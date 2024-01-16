@@ -11,6 +11,9 @@
 //KD_TREE<pcl::PointXYZ> ikd_tree;
 
 #define MAX_ITER_COUNT 5
+#define MAX_NEIGHBOR_NUM 20
+
+#define A2D_THRESHOLD 0.4 //UNSTRUCTE:low; , structure: >0.4
 
 const bool timelist(PointXYZIRT &x, PointXYZIRT &y){return x.timestamp < y.timestamp;}
 
@@ -64,6 +67,11 @@ public:
     OptPose last_pose;
     int iter_nums; // 5
 
+    int motion_evaluate;
+
+    double a2d_average;
+
+
     Lidar_odo()
     {
         //ROS_INFO("1");
@@ -95,7 +103,7 @@ public:
 
 //        last_pose.initialMotion();
 
-
+        motion_evaluate=0;
 
     }
 
@@ -132,14 +140,14 @@ public:
 
         //curr_frame.downSampleOriCloud();
         //下采样会导致问题
-        curr_frame.grid_sample_mid();
+        curr_frame.grid_sample_mid(DOWNSAMPLE_VOXEL_SIZE);
         //curr_frame.grid_sample_timeMid();
         //curr_frame.update();
         //curr_frame.updateFromDownSample();
     }
 
     bool SearchNeighbor_(const Voxelmap<PointXYZIRT> &local_map, const Eigen::Vector3d & PointW,
-                        double searchThreshold, VoxelBlock<PointXYZIRT> & neighbor){
+                        double searchThreshold, VoxelBlock<PointXYZIRT> & neighbor_block, int max_neighbor_num=MAX_NEIGHBOR_NUM){
 //        Eigen::Vector3d PointW_(PointW.x, PointW.y,PointW.z);
 
         Voxel voxel = Voxel::Coordinates(PointW,MAP_VOXEL_SIZE);
@@ -167,7 +175,7 @@ public:
                                     +(neighbor[2]-PointW[2])*(neighbor[2]-PointW[2]);
                             //ROS_INFO("DIS:%f,",dis);
 //                            if(dis<searchThreshold){
-                                if(neighborsQueue.size() == max_neighbor_nums){
+                                if(neighborsQueue.size() == MAX_NEIGHBOR_NUM){
                                     if(dis < std::get<0>(neighborsQueue.top())){
                                         neighborsQueue.pop();
 
@@ -188,7 +196,7 @@ public:
             }
         }
 
-        if(neighborsQueue.size() >= max_neighbor_nums ){//estiplane?
+        if(neighborsQueue.size() >= MAX_NEIGHBOR_NUM ){//estiplane?
 
             while(!neighborsQueue.empty()){
 //                 Eigen::Vector3d temp;
@@ -201,7 +209,7 @@ public:
                 temp.x=std::get<1>(neighborsQueue.top()).x();
                 temp.y=std::get<1>(neighborsQueue.top()).y();
                 temp.z=std::get<1>(neighborsQueue.top()).z();
-                neighbor.points.push_back(temp);
+                neighbor_block.points.push_back(temp);
                 neighborsQueue.pop();
             }
 //                 neighbor.addPoint(std::get<1>(neighborsQueue.top()));
@@ -281,6 +289,7 @@ public:
             ROS_INFO("------------------------------frame_id:%d",frame_count);
 
             // get pcl cloud
+            motion_evaluate =0;
             cloud_ori_ros = std::move(rosCloudQue.front());
             rosCloudQue.pop_front();
 
@@ -332,6 +341,7 @@ public:
             auto initframe_end = std::chrono::steady_clock::now();
             double init_cost = std::chrono::duration<double, std::milli>(initframe_end-initframe_start).count();
             if(debug_print) {
+                ROS_INFO("After DownSample: %d",curr_frame.cloud_ori_downsample->size());
                 ROS_INFO("INIT COST: %f ms", init_cost);
             }
 
@@ -348,8 +358,15 @@ public:
                 //neighbor.clear();//size=0
                 // find correspance
 
+//                if( motion_evaluate==2){
+//                    ROS_WARN("BIG MOTION! LOW DOWNSAMPLE!!");
+//                    motion_evaluate =0;
+//                    curr_frame.grid_sample_mid(0.5 * DOWNSAMPLE_VOXEL_SIZE);
+//                }
+
                 // ceres opt
                 ceres::LossFunction *loss_function = new ceres::CauchyLoss(0.1);
+                //ceres::LossFunction * loss_function = new ceres::HuberLoss(0.1);
                 ceres::Problem problem;
 
                 Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
@@ -395,6 +412,7 @@ public:
 
 
 //#pragma omp parallel for num_threads(8)
+
                 for (auto point : curr_frame.cloud_ori_downsample->points) {
 
 
@@ -444,10 +462,14 @@ public:
                         compouteDisatribute += std::chrono::duration<double, std::milli>(time4 - time3).count();
 //                        double weight=0.9*a2d*a2d+
 //                                0.1*std::exp(-(getPointXYZ(neighbor.points.back())- world_point).norm()/(0.3*20));
+//                        double weight = a2d<0.5?0:a2d;//remove no plane
+
+                        if(a2d<A2D_THRESHOLD) continue;
                         double weight = a2d;
+                        opt_num++;
 //                        double dis_point = std::abs((world_point-getPointXYZ(neighbor.points.back())).transpose() * normal) ;
-//                        if(dis_point<0.3){
-                            opt_num++;
+//                        if(dis_point<1){// reduce the num opt
+
 
 
 //                         ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor, 1, 4, 4, 3, 3>(
@@ -468,10 +490,12 @@ public:
                 }
 
 
+
+
                 //publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");//1ms
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
-                neighbor_find_average += std::chrono::duration<double, std::milli >(findNeighbor_end-findNeighbor_start).count();
+                neighbor_find_average = std::chrono::duration<double, std::milli >(findNeighbor_end-findNeighbor_start).count();
 
                 if (debug_print) {
 //                    ROS_INFO("neighbor COST: %f ms",
@@ -481,6 +505,8 @@ public:
 //                    ROS_INFO("problem make COST: %f ms",
 //                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
 //                    ROS_INFO("OPT_NUM:%d",opt_num);
+
+
                 }
                 //add other constraints
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
@@ -506,7 +532,7 @@ public:
 
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocityRotTran,6,4,4,3,3>(
                         new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.01))),
-                        nullptr,
+                                         nullptr,
                         begin_quat.coeffs().data(),end_quat.coeffs().data(),begin_trans.data(),end_trans.data()
                         );
 
@@ -514,7 +540,7 @@ public:
                 // solve
                 ceres::Solver::Options option;
                 option.linear_solver_type = ceres::DENSE_QR;
-                option.max_num_iterations =4;
+                option.max_num_iterations =6;
                 option.num_threads = 16;
                 option.trust_region_strategy_type = ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
 
@@ -524,7 +550,7 @@ public:
 
                 auto solve_end = std::chrono::steady_clock::now();
 
-                solve_average += std::chrono::duration<double, std::milli >(solve_end-solve_start).count();
+                solve_average = std::chrono::duration<double, std::milli >(solve_end-solve_start).count();
 
 //                if (debug_print) {
 //                    ROS_INFO("SLOVE COST: %f ms",
@@ -542,10 +568,12 @@ public:
                 //curr_frame.update();
 
 
-                if(curr_frame.pose.compareDiff(poses.back())) {
-                    //poses.push_back(curr_frame.pose);
+                motion_evaluate = curr_frame.pose.compareDiff(poses.back());
+
+                if(motion_evaluate ==0){
                     break;
                 }
+
 
 
 
@@ -554,7 +582,7 @@ public:
 //            EulerAngles end_euler = ToEulerAngles(pre_pose.endQuat());
 //            ROS_INFO("ruler: %f, %f,%f", end_euler.roll, end_euler.pitch, end_euler.yaw);
             ROS_INFO("finish with %d iters.", iter_count);
-            ROS_INFO("fine neighbor cost : %f",neighbor_find_average);
+            ROS_INFO("find neighbor cost : %f",neighbor_find_average);
             ROS_INFO("solve : %f", solve_average);
 //          --------------------------------------update local_map---------------------------------------
             auto map_start = std::chrono::steady_clock::now();

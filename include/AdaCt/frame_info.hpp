@@ -8,6 +8,7 @@
 #define DOWNSAMPLE_EDGE_VOXEL_SIZE 0.2
 #define DOWNSAMPLE_PLANE_VOXEL_SIZE 0.4
 
+const bool pointcmp(PointXYZIRT &x, PointXYZIRT &y){return x.x * x.x + x.y*x.y+x.z*x.z < y.x*y.x+y.y*y.y+y.z*y.z;}
 
 class frame_info
 {
@@ -164,10 +165,18 @@ public:
          cloud_ori_downsample->reserve(grid.size());
          for(const auto &[_,voxel_block] : grid){
              //cloud_ori_downsample->points.push_back(point);
+//             int num = voxel_block.points.size();
+//             if(num<5){
+//                 continue;
+//             }else if(num <10){
+//
+//             }
 
              PointXYZIRT midP = voxel_block.points[voxel_block.numPoints()/2];//use the const? cannot change the var in object(const auto used in above)
-
+             //sort(voxel_block.points.begin(),voxel_block.points.end(),pointcmp);
              cloud_ori_downsample->points.push_back(midP);
+
+
          }
 
      }
@@ -255,7 +264,7 @@ public:
 
     }
 
-    void grid_sample_mid(){
+    void grid_sample_mid(double downsample_size){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
         //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
@@ -265,9 +274,9 @@ public:
             //Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
             //double timestamp = cloud_ori->points[i].timestamp;
             double dis = point.x * point.x + point.y * point.y + point.z * point.z;
-            voxel.x = static_cast<short>(point.x / voxelSize);
-            voxel.y = static_cast<short>(point.y / voxelSize);
-            voxel.z = static_cast<short>(point.z / voxelSize);
+            voxel.x = static_cast<short>(point.x / downsample_size);
+            voxel.y = static_cast<short>(point.y / downsample_size);
+            voxel.z = static_cast<short>(point.z / downsample_size);
             if(dis< blind || !std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
                 continue;
             }
@@ -414,7 +423,7 @@ public:
         int count=0;
         for(auto point : cloud_ori->points){
             count++;
-            if(point.ring>15){
+            if(point.ring>20){
                 if(count % 10) continue;//20
             }
             else {

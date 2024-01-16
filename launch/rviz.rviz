@@ -6,6 +6,7 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /Path1
         - /TF1/Frames1
         - /valid_cloud1
       Splitter Ratio: 0.5
@@ -110,15 +111,15 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
-    - Alpha: 3
+    - Alpha: 10
       Buffer Length: 1
       Class: rviz/Path
-      Color: 25; 255; 0
+      Color: 172; 64; 191
       Enabled: true
       Head Diameter: 0.30000001192092896
       Head Length: 0.20000000298023224
       Length: 0.30000001192092896
-      Line Style: Lines
+      Line Style: Billboards
       Line Width: 0.029999999329447746
       Name: Path
       Offset:
@@ -465,7 +466,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 43.89060592651367
+      Distance: 17.770723342895508
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -481,9 +482,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.470202088356018
+      Pitch: 1.3447961807250977
       Target Frame: <Fixed Frame>
-      Yaw: 3.0364222526550293
+      Yaw: 3.0932400226593018
     Saved: ~
 Window Geometry:
   Displays:

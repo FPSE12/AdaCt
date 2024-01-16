@@ -128,7 +128,7 @@ public:
         first_flag = true;
         frame_count =-1;
 
-        iter_nums =10;
+        iter_nums =5;
 
         fullCloudQue.clear();
         edgeCloudQue.clear();
