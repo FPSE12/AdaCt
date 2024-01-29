@@ -445,16 +445,16 @@ public:
 
 
         }
-        return;
+//        return;
     }
     void updateFromDownSample(){
         cloud_world->clear();
-        cloud_world->resize(cloud_ori_downsample->size());
-        cloud_deskew->clear();
-        cloud_deskew->resize(cloud_ori_downsample->size());
-        for(int i=0;i<cloud_ori_downsample->size();i++){
-            PointXYZIRT temp=cloud_ori_downsample->points[i];
-            double alpha=(temp.timestamp-timeStart)/(timeEnd-timeStart);
+//        cloud_world->resize(cloud_ori_downsample->size());
+//        cloud_deskew->clear();
+//        cloud_deskew->resize(cloud_ori_downsample->size());
+        for(auto point : cloud_ori_downsample->points){
+
+            double alpha=(point.timestamp-timeStart)/(timeEnd-timeStart);
 
 //            POSE inter_pose=pose.linearInplote(alpha);
 //            V3D temp_P(temp.x,temp.y,temp.z);
@@ -477,23 +477,17 @@ public:
 //            cloud_deskew->points[i]=temp;
 
             SE3 temp_T_world=pose.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
+            V3D temp_P(point.x,point.y,point.z);
             temp_P=temp_T_world * temp_P;
 
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
+            point.x=temp_P[0];
+            point.y=temp_P[1];
+            point.z=temp_P[2];
 
             //千万不能用push_back，会在size的基础上进行增加
-            cloud_world->points[i]=temp;
+            cloud_world->push_back(point);
 
-//            temp_P = pose.end_pose.inverse() * temp_P;
-//
-//            temp.x=temp_P[0];
-//            temp.y=temp_P[1];
-//            temp.z=temp_P[2];
-//
-//            cloud_deskew->points[i]=temp;
+
         }
         return;
     }

@@ -2,7 +2,7 @@
 
 #include "AdaCt/utility.h"
 #include "AdaCt/optPoseMultiMode.hpp"
-#include "voxelmap/voxelmapMultiMode.hpp"
+#include "voxelmap/voxelmap.hpp"
 
 
 
@@ -260,30 +260,29 @@ public:
 
     }
 
-    void grid_sample_mid(){
+    void grid_sample_mid(double DownSampleSize){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
-        grid.reserve(size_t(cloud_ori->size()));
+        //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
         //int blind_voxel=ceil(blind/voxelSize);
-        for(int i=0;i<cloud_ori->size();i++){
-            PointXYZIRT rawP = cloud_ori->points[i];
-            Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
-            double timestamp = cloud_ori->points[i].timestamp;
-            double dis = raw_point.norm();
-            voxel.x = static_cast<short>(cloud_ori->points[i].x / voxelSize);
-            voxel.y = static_cast<short>(cloud_ori->points[i].y / voxelSize);
-            voxel.z = static_cast<short>(cloud_ori->points[i].z / voxelSize);
-            if(dis< blind || !std::isfinite(raw_point(0))|| !std::isfinite(raw_point(1)) || !std::isfinite(raw_point(2))){
+        for(auto point : cloud_ori->points){
+//            Eigen::Vector3d  raw_point(point.x,point.y,point.z);
+//            double timestamp = cloud_ori->points[i].timestamp;
+            double dis = point.x*point.x + point.y*point.y + point.z * point.z;
+            voxel.x = static_cast<short>(point.x / DownSampleSize);
+            voxel.y = static_cast<short>(point.y / DownSampleSize);
+            voxel.z = static_cast<short>(point.z / DownSampleSize);
+            if(dis< blind || !std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
                 continue;
             }
-            if(grid.find(voxel)==grid.end()){
-                grid[voxel].addPoint(rawP);
-            }else{
-               grid[voxel].addPoint(rawP);
-            }
+//            if(grid.find(voxel)==grid.end()){
+//                grid[voxel].addPoint(rawP);
+//            }else{
+//               grid[voxel].addPoint(rawP);
+//            }
+            grid[voxel].addPoint(point);
         }
         cloud_ori_downsample->clear();
-        cloud_ori_downsample->reserve(grid.size());
         for(const auto &[_,voxel_block] : grid){
             //cloud_ori_downsample->points.push_back(point);
 
@@ -416,51 +415,21 @@ public:
 
     void updateFromDownSample(){
         cloud_world->clear();
-        cloud_world->resize(cloud_ori_downsample->size());
-        cloud_deskew->clear();
-        cloud_deskew->resize(cloud_ori_downsample->size());
-        for(int i=0;i<cloud_ori_downsample->size();i++){
-            PointXYZIRT temp=cloud_ori_downsample->points[i];
-            double alpha=(temp.timestamp-poses_time.front())/(poses_time.back()-poses_time.front());
+        for(auto point : cloud_ori_downsample->points){
 
-//            POSE inter_pose=pose.linearInplote(alpha);
-//            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P = inter_pose.first * temp_P + inter_pose.second;
-//
-//
-//            temp.x=temp_P[0];
-//            temp.y=temp_P[1];
-//            temp.z=temp_P[2];
-//
-//            //千万不能用push_back，会在size的基础上进行增加
-//            cloud_world->points[i]=temp;
-////
-//            temp_P = pose.end_pose.inverse() * temp_P;
-////
-//            temp.x=temp_P[0];
-//            temp.y=temp_P[1];
-//            temp.z=temp_P[2];
-//
-//            cloud_deskew->points[i]=temp;
+            double alpha=(point.timestamp-poses_time.front())/(poses_time.back()-poses_time.front());
+
 
             SE3 temp_T_world=poses.linearInplote(alpha);
-            V3D temp_P(temp.x,temp.y,temp.z);
+            V3D temp_P(point.x,point.y,point.z);
             temp_P=temp_T_world * temp_P;
 
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
+            point.x=temp_P[0];
+            point.y=temp_P[1];
+            point.z=temp_P[2];
 
-            //千万不能用push_back，会在size的基础上进行增加
-            cloud_world->points[i]=temp;
+            cloud_world->points.push_back(point);
 
-            temp_P = poses.back().inverse() * temp_P;
-
-            temp.x=temp_P[0];
-            temp.y=temp_P[1];
-            temp.z=temp_P[2];
-
-            cloud_deskew->points[i]=temp;
         }
         return;
     }

@@ -18,8 +18,10 @@ downsample: map->big(to find more points), curr->frame->big
 
 
 a2d:
-indoor ave: 0.4-0.45: people
+indoor ave: 0.4-0.45: people  0.3-0.4
 55lou ave:  indoor 0.45-0.6
 
 outdoor sipailou: 0.4 -0.52
+
+forest: downsample most is ground, 树干上的点大多邻居不够
 

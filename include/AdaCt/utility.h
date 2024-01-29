@@ -90,7 +90,7 @@ public:
         nh.param<int>("",N_SCAN,32);
         nh.param<int>("", Horizon_SCAN, 1800);
         nh.param<double>("",vertical_fov,41.3);
-        nh.param<int>("",groundScanInd,20);
+        nh.param<int>("",groundScanInd,20);//< 32
         ang_res_x = (double )360/Horizon_SCAN;
         ang_res_y = (double )vertical_fov/(N_SCAN-1);
         segmentAlphaX = ang_res_x / 180.0 * M_PI;

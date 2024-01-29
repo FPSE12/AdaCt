@@ -495,7 +495,7 @@ public:
                 *features =*edge + *plane;
                 *last_features = * features;
 
-                feature_map.InsertPointCloud(features, curr_frame.pose);
+                feature_map.InsertPointCloud(features);
 
                 poses.push_back(curr_frame.pose);
 
@@ -659,7 +659,7 @@ public:
             curr_frame.updateFeature();
             feature_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
             *features = *curr_frame.edge_world+ *curr_frame.plane_world;
-            feature_map.InsertPointCloud(features,curr_frame.pose);
+            feature_map.InsertPointCloud(features);
 //            feature_map.InsertPointCloud(curr_frame.plane_world,curr_frame.pose);
 //            feature_map.InsertPointCloud(curr_frame.edge_world,curr_frame.pose);
 

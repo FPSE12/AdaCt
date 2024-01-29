@@ -145,16 +145,17 @@ target_link_libraries(lidar_odometry_voxelmap
         ${OpenMP_CXX_FLAGS}
         )
 
-#add_executable(lidar_odometry_opt src/test/lidar_odometry_opt.cpp )
-#target_link_libraries(lidar_odometry_opt
-#        ${catkin_LIBRARIES}
-#        ${PCL_LIBRARIES}
-#        ${CERES_LIBRARIES}
-#        ${Sophus_LIBRARIES}
-#        tsl::robin_map
-#        #OpenMP::OpenMP_CXX
-#        ${OpenMP_CXX_FLAGS}
-#        )
+add_executable(lidar_odometry_voxelmap_segment src/lidar_odometry_voxelmap_segment.cpp )
+target_link_libraries(lidar_odometry_voxelmap_segment
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        ${OpenCV_LIBRARIES}
+        ${OpenMP_CXX_FLAGS}
+        )
+
 
 add_executable(lidar_odometry_voxelmapMultiMode src/lidar_odometry_voxelmapMultiMode.cpp)
 target_link_libraries(lidar_odometry_voxelmapMultiMode

@@ -75,11 +75,14 @@ public:
 //
 //    }
     OptPoseMultiMode & operator = (const OptPoseMultiMode & pose){
-        poses.resize(pose.poseNum);
-        poseNum=pose.poseNum;
-        for(int i=0;i<poseNum;i++){
-            poses[i]=pose.poses[i];
+        if(this !=  & pose){
+            this->poses.resize(pose.poseNum);
+            this->poseNum=pose.poseNum;
+            for(int i=0;i<this->poseNum;i++){
+                this->poses[i]=pose.poses[i];
+            }
         }
+        return  *this;
     }
 
     SE3 & back(){

@@ -99,21 +99,24 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="7dddee3f-b416-43a6-99a2-90c39e25262b" name="变更" comment="变更">
-      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/AdaCt.iml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+      <change afterPath="$PROJECT_DIR$/include/AdaCt/frame_info_segment.hpp" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/src/lidar_odometry_voxelmap_segment.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/CMakeLists.txt" beforeDir="false" afterPath="$PROJECT_DIR$/CMakeLists.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/include/AdaCt/costfunction.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/costfunction.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/AdaCt/downSample.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/downSample.hpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/include/AdaCt/frame_info.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/frame_info.hpp" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/voxelmap/pointType.h" beforeDir="false" afterPath="$PROJECT_DIR$/include/voxelmap/pointType.h" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/include/voxelmap/voxelblock.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/voxelmap/voxelblock.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/include/AdaCt/frame_infoMultiMode.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/frame_infoMultiMode.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/include/AdaCt/optPoseMultiMode.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/optPoseMultiMode.hpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/include/AdaCt/utility.h" beforeDir="false" afterPath="$PROJECT_DIR$/include/AdaCt/utility.h" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/include/voxelmap/voxelmap.hpp" beforeDir="false" afterPath="$PROJECT_DIR$/include/voxelmap/voxelmap.hpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/launch/run.launch" beforeDir="false" afterPath="$PROJECT_DIR$/launch/run.launch" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/launch/rviz.rviz" beforeDir="false" afterPath="$PROJECT_DIR$/launch/rviz.rviz" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/lidar_odometry_voxelmap.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/lidar_odometry_voxelmap.cpp" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/lidar_odometry_voxelmapMultiMode.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/lidar_odometry_voxelmapMultiMode.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/old/lidar_odometry_featureVoxelmap.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/old/lidar_odometry_featureVoxelmap.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/old/lidar_odometry_featureVoxelmapNew.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/old/lidar_odometry_featureVoxelmapNew.cpp" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/preprocess_new.cpp" beforeDir="false" afterPath="$PROJECT_DIR$/src/preprocess_new.cpp" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -695,6 +698,7 @@
       <workItem from="1703222950518" duration="664000" />
       <workItem from="1704355326923" duration="15424000" />
       <workItem from="1704416814137" duration="5934000" />
+      <workItem from="1706532353291" duration="7000" />
     </task>
     <servers />
   </component>

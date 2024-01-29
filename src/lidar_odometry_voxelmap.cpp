@@ -33,6 +33,7 @@ public:
     ros::Publisher cloud_ori_pub;
     ros::Publisher cloud_valid_pub;
     ros::Publisher cloud_world_pub;
+    ros::Publisher cloud_downsample_pub;
 
 
     // cloud
@@ -83,7 +84,7 @@ public:
         cloud_ori_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/ori_pointcloud",1);
         cloud_valid_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/valid_points",1);
         cloud_world_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/world_points",1);
-
+        cloud_downsample_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/downsample",1);
 
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
         cloud_valid.reset(new pcl::PointCloud<PointXYZIRT>());
@@ -317,7 +318,7 @@ public:
                 curr_frame.setOricloud(cloud_ori);
                 curr_frame.pose.initialMotion();
 
-                local_map.InsertPointCloud(curr_frame.cloud_ori,curr_frame.pose);
+                local_map.InsertPointCloud(curr_frame.cloud_ori);
 
 //                last_pose=curr_frame.pose;
                 poses.push_back(curr_frame.pose);
@@ -400,17 +401,12 @@ public:
                 // problem.AddParameterBlock(begin_pose.data(),Sophus::SE3d::num_parameters, new LocalParameterizationSE3);
                 // problem.AddParameterBlock(end_pose.data(), Sophus::SE3d::num_parameters, new LocalParameterizationSE3);
 
-
-                int cloud_size = curr_frame.cloud_ori_downsample->size();
-                auto findNeighbor_start = std::chrono::steady_clock::now();
                 int opt_num=0;
-
-
-
+                auto findNeighbor_start = std::chrono::steady_clock::now();
                 double find_neighborcost=0;
                 double compouteDisatribute=0;
 
-
+                cloud_valid->clear();
 //#pragma omp parallel for num_threads(8)
 
                 for (auto point : curr_frame.cloud_ori_downsample->points) {
@@ -432,11 +428,7 @@ public:
                     SE3 inter_pose=curr_frame.pose.linearInplote(alpha);
                     world_point = inter_pose * raw_point;
 
-//                    Eigen::Vector3d sensor_local= (1-alpha)* begin_trans + alpha * end_trans;
 
-//                    Eigen::Quaterniond inter_qual = begin_quat.normalized().slerp(alpha, end_quat.normalized());
-//
-//                    Eigen::Vector3d world_points = inter_qual * raw_point + sensor_local;
                     auto time1 = std::chrono::steady_clock::now();
                     //bool IsValid=local_map.NeighborSearch(curr_frame.cloud_world->points[i],raw_point,searchDis,neighbor,pabcd);
                     bool IsValid= SearchNeighbor_(local_map, world_point,searchDis,neighbor);
@@ -482,7 +474,7 @@ public:
                             problem.AddResidualBlock(cost_function,
                                                      loss_function,
                                                      begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
-                            //cloud_valid->push_back(curr_frame.cloud_ori_downsample->points[i]);
+                            cloud_valid->push_back(point);
 //                        }
 
 
@@ -492,7 +484,9 @@ public:
 
 
 
-                //publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");//1ms
+                publishCloud(cloud_valid_pub,cloud_valid,ros::Time(headertime),"odometry");//1ms
+
+                publishCloud(cloud_downsample_pub,curr_frame.cloud_ori_downsample,ros::Time(headertime),"odometry");
                 auto findNeighbor_end = std::chrono::steady_clock::now();
 
                 neighbor_find_average = std::chrono::duration<double, std::milli >(findNeighbor_end-findNeighbor_start).count();
@@ -523,8 +517,9 @@ public:
 
                 Eigen::Quaterniond pre_quat_delta = poses.back().beginQuat().conjugate()*poses.back().endQuat();
                 pre_quat_delta.normalize();
-                Eigen::Vector3d pre_trans_delta = poses.back().beginQuat().conjugate()* poses.back().endTrans()-
-                        poses.back().beginQuat().conjugate()*poses.back().beginTrans();
+//                Eigen::Vector3d pre_trans_delta = poses.back().beginQuat().conjugate()* poses.back().endTrans()-
+//                        poses.back().beginQuat().conjugate()*poses.back().beginTrans();
+                Eigen::Vector3d pre_trans_delta = poses.back().endTrans() - poses.back().beginTrans();//in world axis
 
 //                SE3  delta_pose = last_pose.begin_pose.inverse() * last_pose.end_pose;
 //                Eigen::Quaterniond pre_quat_delta = delta_pose.unit_quaternion();
@@ -579,17 +574,16 @@ public:
 
 
             }
-//            EulerAngles end_euler = ToEulerAngles(pre_pose.endQuat());
-//            ROS_INFO("ruler: %f, %f,%f", end_euler.roll, end_euler.pitch, end_euler.yaw);
+
             ROS_INFO("finish with %d iters.", iter_count);
             ROS_INFO("find neighbor cost : %f",neighbor_find_average);
             ROS_INFO("solve : %f", solve_average);
 //          --------------------------------------update local_map---------------------------------------
             auto map_start = std::chrono::steady_clock::now();
-            curr_frame.updateWorldCloud();
-
+//            curr_frame.updateWorldCloud();
+            curr_frame.updateFromDownSample();
             local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),100);
-            local_map.InsertPointCloud(curr_frame.cloud_world,curr_frame.pose);
+            local_map.InsertPointCloud(curr_frame.cloud_world);
 
             poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();

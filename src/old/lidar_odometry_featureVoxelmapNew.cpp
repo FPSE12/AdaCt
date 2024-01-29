@@ -483,8 +483,8 @@ public:
 
 
 
-                edge_map.InsertPointCloud(edge, curr_frame.pose);
-                plane_map.InsertPointCloud(plane,curr_frame.pose);
+                edge_map.InsertPointCloud(edge);
+                plane_map.InsertPointCloud(plane);
 
                 *features =*edge + *plane;
                 *last_features = * features;
@@ -637,10 +637,10 @@ public:
             curr_frame.updateFeature();
 
             edge_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
-            edge_map.InsertPointCloud(curr_frame.edge_world,curr_frame.pose);
+            edge_map.InsertPointCloud(curr_frame.edge_world);
 
             plane_map.RemoveFarFromLocation(curr_frame.getEndTrans(),300);
-            plane_map.InsertPointCloud(curr_frame.plane_world,curr_frame.pose);
+            plane_map.InsertPointCloud(curr_frame.plane_world);
 
 
 //            feature_map.InsertPointCloud(curr_frame.plane_world,curr_frame.pose);

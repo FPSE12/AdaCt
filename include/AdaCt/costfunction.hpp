@@ -41,7 +41,7 @@ struct LocationConsistency{
 
         Eigen::Map<Eigen::Matrix<T,6,1>> residual_map(residual);
         residual_map.template block<3,1>(0,0) = delta_trans * T(beta_);
-        residual_map.template block<3,1>(3,0) = delta_rot.vec() * T(beta_);
+        residual_map.template block<3,1>(3,0) = delta_rot.vec() * T(2* beta_);
         return true;
     }
 
@@ -73,7 +73,7 @@ struct ConstantVelocityRotTran{
     template<typename T>
     bool operator()(const T *const begin_rot,
                     const T *const end_rot, const T * const begin_trans,  const T * const end_trans, T * residual) const {
-        Eigen::Map<Eigen::Quaternion<T>> quat_begin(const_cast<T *>(begin_rot));
+        Eigen::Map<Eigen::Quaternion<T>> quat_begin(const_cast<T *>(begin_rot));//const_cast change the const  or volatile
         Eigen::Map<Eigen::Quaternion<T>> quat_end(const_cast<T *>(end_rot));
         Eigen::Map<Eigen::Matrix<T,3,1>> trans_begin(const_cast<T *>(begin_trans));
         Eigen::Map<Eigen::Matrix<T,3,1>> trans_end(const_cast<T *>(end_trans));
@@ -81,16 +81,18 @@ struct ConstantVelocityRotTran{
         //curr velocity
         Eigen::Quaternion<T> quat_delta = quat_begin.conjugate() * quat_end;
         quat_delta.normalize();
-        Eigen::Matrix<T,3,1> tran_delta = quat_begin.conjugate() * trans_end - quat_begin.conjugate()* trans_begin;
-
+//        Eigen::Matrix<T,3,1> tran_delta = quat_begin.conjugate() * (trans_end - trans_begin);
+        Eigen::Matrix<T,3,1> tran_delta = trans_end - trans_begin;
         //velocity consistant
         Eigen::Quaternion<T> delta_quat = quat_delta.conjugate() * pre_delta_rot_.template cast<T>();//must change to T
         delta_quat.normalize();
-        Eigen::Matrix<T,3,1> delta_trans = quat_delta.conjugate()*pre_delta_trans_.template cast<T>()-quat_delta.conjugate()*tran_delta;
+//        Eigen::Matrix<T,3,1> delta_trans = quat_delta.conjugate()*(pre_delta_trans_.template cast<T>()-tran_delta);
+        Eigen::Matrix<T,3,1> delta_trans = tran_delta - pre_delta_trans_.template cast<T>();
 
         Eigen::Map<Eigen::Matrix<T, 6, 1>> residual_map(residual);
         residual_map.template block<3,1>(0,0) = delta_trans *T(beta_);
-        residual_map.template block<3,1>(3,0) = delta_quat.vec() *T(beta_);
+        residual_map.template block<3,1>(3,0) = delta_quat.vec() *T(2*beta_);
+//        residual_map(6,0) = (delta_quat.w() - T(1.0)) *  T(2 * beta_);
         return true;
     }
 
@@ -102,24 +104,80 @@ private:
 
 
 struct MultiModeConstantVelocity{
-    MultiModeConstantVelocity(const Eigen::Vector3d &previoud_velocity, double beta ):previou_velocity_(previoud_velocity),beta_(beta){}
+    MultiModeConstantVelocity( double beta ):beta_(beta){}
 
     template<typename T>
-    bool operator()(const T * const begin_t, const T* const mid_t ,const T *const end_t, T * residual) const{
-        residual[0]=beta_*(mid_t[0]-begin_t[0]-previou_velocity_(0,0));
-        residual[1]=beta_*(mid_t[1]-begin_t[1]-previou_velocity_(1,0));
-        residual[2]=beta_*(mid_t[2]-begin_t[2]-previou_velocity_(2,0));
+    bool operator()(const T * const begin_r, const T * const mid_r, const T * const end_r,
+            const T * const begin_t, const T* const mid_t ,const T *const end_t, T * residual) const{
+        Eigen::Map<Eigen::Quaternion<T>> begin_quat(const_cast <T *>(begin_r));
+        Eigen::Map<Eigen::Quaternion<T>> mid_quat(const_cast <T *>(mid_r));
+        Eigen::Map<Eigen::Quaternion<T>> end_quat(const_cast <T *>(end_r));
 
-        residual[3]=beta_*(end_t[0]-mid_t[0]-mid_t[0]+begin_t[0]);
-        residual[4]=beta_*(end_t[1]-mid_t[1]-mid_t[1]+begin_t[1]);
-        residual[5]=beta_*(end_t[2]-mid_t[2]-mid_t[2]+begin_t[2]);
+        Eigen::Map<Eigen::Matrix<T,3,1>> begin_trans(const_cast <T *>(begin_t));
+        Eigen::Map<Eigen::Matrix<T,3,1>> mid_trans(const_cast <T *>(mid_t));
+        Eigen::Map<Eigen::Matrix<T,3,1>> end_trans(const_cast <T *>(end_t));
+
+        //front vel
+        Eigen::Quaternion<T> pre_quat = begin_quat.conjugate() * mid_quat;
+        Eigen::Matrix<T,3,1> pre_tran = mid_trans -begin_trans;
+        //back vel
+        Eigen::Quaternion<T> next_quat = mid_quat.conjugate() * end_quat;
+        Eigen::Matrix<T,3,1> next_tran = end_trans - mid_trans;
+        //delta vel
+        Eigen::Quaternion<T> delta_quat = pre_quat.conjugate() * next_quat;
+        Eigen::Matrix<T,3,1> delta_tran = next_tran - pre_tran;
+
+        Eigen::Map<Eigen::Matrix<T,6,1>> residual_map(residual);
+        residual_map.template block<3,1>(0,0) = delta_quat.vec() * T(beta_);
+
+        residual_map.template block<3,1>(3,0) = delta_tran * T(beta_);
 
 
         return true;
     }
 private:
-    Eigen::Vector3d previou_velocity_;
-    double beta_=1.0;
+
+    double beta_;
+};
+
+struct Disconnecty{
+    Disconnecty(const  Eigen::Vector3d &begin_point_, const Eigen::Vector3d &end_point_, double alpha1_, double alpha2_,double beta_):
+        begin_point(begin_point_), end_point(end_point_),beta(beta_),alpha1(alpha1_),alpha2(alpha2_){}
+
+    template<typename T>
+    bool operator()(const T * const begin_r, const T *const end_r,
+             T * residual)const {
+        Eigen::Map<Eigen::Quaternion<T>> begin_quat(const_cast <T*>(begin_r));
+        Eigen::Map<Eigen::Quaternion<T>> end_quat(const_cast <T*>(end_r));
+//        Eigen::Map<Eigen::Matrix<T,3,1>> begin_tran(const_cast <T*>(begin_t));
+//        Eigen::Map<Eigen::Matrix<T,3,1>> end_tran(const_cast <T*>(end_t));
+        Eigen::Quaternion<T> quat_inter1=begin_quat.normalized().slerp(T(0.0),end_quat.normalized());
+        Eigen::Quaternion<T> quat_inter2=begin_quat.normalized().slerp(T(1.0),end_quat.normalized());
+//        Eigen::Map<Eigen::Matrix<T,3,32>> residual_map(residual);
+        Eigen::Quaternion<T> delta = quat_inter1.conjugate() * quat_inter2;
+//        Eigen::Matrix<T,3,1> delta_t = end_tran - begin_tran;
+
+
+        Eigen::Matrix<T,3,1> trans_begin = delta * begin_point.template cast<T>() ;
+        Eigen::Matrix<T,3,1> end_point_T = end_point.template cast<T>();
+
+        Eigen::Matrix<T,3,1> cross_dut = trans_begin.cross(end_point_T);
+
+        residual[0] = T(beta) *cross_dut.norm();
+
+//        residual[0] = T(beta) * (trans_begin[1]*end_point_T[2] - trans_begin[2] * end_point_T[1]);
+//        residual[1] = T(beta) * (trans_begin[2]*end_point_T[0] - trans_begin[0] * end_point_T[2]);
+//        residual[2] = T(beta) * (trans_begin[0]*end_point_T[1] - trans_begin[1] * end_point_T[0]);
+        return true;
+    }
+
+
+private:
+    Eigen::Vector3d begin_point;
+    Eigen::Vector3d end_point;
+    double beta;
+    double alpha1;
+    double alpha2;
 };
 
 struct CTFunctor{

@@ -8,7 +8,9 @@ Panels:
         - /Status1
         - /Path1
         - /TF1/Frames1
+        - /ori_downsample1
         - /valid_cloud1
+        - /targetPoint1
       Splitter Ratio: 0.5
     Tree Height: 1288
   - Class: rviz/Selection
@@ -29,7 +31,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: map
+    SyncSource: valid_cloud
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -170,7 +172,7 @@ Visualization Manager:
       Color: 238; 238; 236
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: false
+      Enabled: true
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Min Color: 0; 0; 0
@@ -182,6 +184,34 @@ Visualization Manager:
       Size (m): 0.009999999776482582
       Style: Flat Squares
       Topic: /adact/ori_pointcloud
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 172; 64; 191
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: ori_downsample
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05000000074505806
+      Style: Flat Squares
+      Topic: /adact/downsample
       Unreliable: false
       Use Fixed Frame: true
       Use rainbow: true
@@ -207,7 +237,7 @@ Visualization Manager:
       Queue Size: 10
       Selectable: true
       Size (Pixels): 3
-      Size (m): 0.05000000074505806
+      Size (m): 0.10000000149011612
       Style: Flat Squares
       Topic: /adact/valid_points
       Unreliable: false
@@ -438,6 +468,34 @@ Visualization Manager:
       Use Fixed Frame: true
       Use rainbow: true
       Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 0; 255; 0
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: false
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: targetPoint
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05000000074505806
+      Style: Flat Squares
+      Topic: /adact/targetcloud
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -466,7 +524,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 17.770723342895508
+      Distance: 25.961008071899414
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -474,17 +532,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.0221861600875854
-        Y: -0.8185376524925232
-        Z: 2.3452045917510986
+        X: 0.9401453137397766
+        Y: 3.0421721935272217
+        Z: 1.8593662977218628
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.3447961807250977
+      Pitch: 1.0747967958450317
       Target Frame: <Fixed Frame>
-      Yaw: 3.0932400226593018
+      Yaw: 2.9932448863983154
     Saved: ~
 Window Geometry:
   Displays:

@@ -9,6 +9,7 @@
 #define max_neighbor_nums 20
 
 #define MAP_VOXEL_SIZE 0.4
+#define MIN_DISTANCE_POINT 0.1
 
 
 template<class PointT>
@@ -18,7 +19,7 @@ template<class PointT>
          //0.2  ,0.03, 50; 0.5,0.1,40,1.5,0.15,40
          voxel_size=MAP_VOXEL_SIZE;
          max_voxel_block_size=40;
-         min_distance_between_points=0.1;
+         min_distance_between_points=MIN_DISTANCE_POINT;
          num_points=0;
 
          frame_count=0;
@@ -41,6 +42,7 @@ template<class PointT>
          }
 
          auto &voxelBlock = map[voxel];
+//         map[voxel].addPointWithProperties(Wpoint,frame_id,point_id);
 
          if(voxelBlock.numPoints()<max_voxel_block_size){
              double min_dis = std::numeric_limits<double>::max();
@@ -61,7 +63,7 @@ template<class PointT>
          return {} ;
      }
 
-     void InsertPointCloud(typename pcl::PointCloud<PointT>::ConstPtr worldCloud, OptPose curr_trans){
+     void InsertPointCloud(typename pcl::PointCloud<PointT>::ConstPtr worldCloud){
 
          frame_count++;
 //         frameID_to_frame[frame_count]={worldCloud, curr_trans};
