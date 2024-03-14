@@ -31,6 +31,10 @@ template<class PointT>
          Eigen::Vector3d WpointVec(Wpoint.x,Wpoint.y,Wpoint.z);
          Voxel voxel=Voxel::Coordinates(WpointVec,voxel_size);
 
+//         map[voxel].addPointWithProperties(Wpoint,frame_id,point_id);
+//         num_points++;
+//         return voxel;
+
          if(map.find(voxel)==map.end()){
              map[voxel].points.reserve(max_voxel_block_size);
             // map[voxel].points.push_back(Wpoint);

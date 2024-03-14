@@ -64,7 +64,7 @@ public:
     // opt pose
 //    OptPose pre_pose, curr_pose;
 
-    std::vector<OptPose> poses;
+    std::vector<OptPose> key_poses;
     OptPose last_pose;
     int iter_nums; // 5
 
@@ -122,21 +122,21 @@ public:
         curr_frame.setOricloud(cloud_ori);
         if(frame_count<1){
             curr_frame.pose.initialMotion();
-            //poses.push_back(curr_frame.pose);
+            //key_poses.push_back(curr_frame.pose);
         }else{
 
-//            curr_frame.pose.begin_pose = poses[frame_count].begin_pose *(poses[frame_count-1].begin_pose.inverse() * poses[frame_count].begin_pose);
-//            curr_frame.pose.end_pose = poses[frame_count].end_pose * (poses[frame_count-1].end_pose.inverse() * poses[frame_count].end_pose);
-            //OptPose last_pose = poses.back();
-            curr_frame.pose.begin_pose = poses.back().end_pose;
-            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-            //curr_frame.pose.end_pose = poses.back().end_pose *(poses[poses.size()-2].end_pose.inverse() * poses.back().end_pose);
+//            curr_frame.pose.begin_pose = key_poses[frame_count].begin_pose *(key_poses[frame_count-1].begin_pose.inverse() * key_poses[frame_count].begin_pose);
+//            curr_frame.pose.end_pose = key_poses[frame_count].end_pose * (key_poses[frame_count-1].end_pose.inverse() * key_poses[frame_count].end_pose);
+            //OptPose last_pose = key_poses.back();
+            curr_frame.pose.begin_pose = key_poses.back().end_pose;
+            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse() * key_poses.back().end_pose);
+            //curr_frame.pose.end_pose = key_poses.back().end_pose *(key_poses[key_poses.size()-2].end_pose.inverse() * key_poses.back().end_pose);
         }
 
-//        curr_frame.pose.begin_pose = poses.back().end_pose;
-//        //curr_frame.pose.end_pose = poses[frame_count-1].end_pose * poses[frame_count-2].end_pose.inverse() * poses[frame_count-1].end_pose;
-//        curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-//        curr_frame.pose=poses.back();
+//        curr_frame.pose.begin_pose = key_poses.back().end_pose;
+//        //curr_frame.pose.end_pose = key_poses[frame_count-1].end_pose * key_poses[frame_count-2].end_pose.inverse() * key_poses[frame_count-1].end_pose;
+//        curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse()*key_poses.back().end_pose);
+//        curr_frame.pose=key_poses.back();
 
 
         //curr_frame.downSampleOriCloud();
@@ -321,7 +321,7 @@ public:
                 local_map.InsertPointCloud(curr_frame.cloud_ori);
 
 //                last_pose=curr_frame.pose;
-                poses.push_back(curr_frame.pose);
+                key_poses.push_back(curr_frame.pose);
                 //ROS_INFO("2");
                 first_flag = false;
 
@@ -335,7 +335,7 @@ public:
 
 
             // init frame_info
-            last_pose = poses.back();
+            last_pose = key_poses.back();
 //            std::cout<<"last_trans:"<<last_pose.endTrans()<<std::endl;
             Initframe();
             //cloud_ori->clear();
@@ -504,22 +504,22 @@ public:
                 }
                 //add other constraints
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
-                        new LocationConsistency(poses.back().endQuat(),poses.back().endTrans(),std::sqrt(opt_num*0.01))),
+                        new LocationConsistency(key_poses.back().endQuat(), key_poses.back().endTrans(), std::sqrt(opt_num * 0.01))),
                                          nullptr,
                                          begin_quat.coeffs().data(),begin_trans.data()
 
                         );
 //                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocity,3,3,3>(
-//                        new ConstantVelocity(poses.back().endTrans()-poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
+//                        new ConstantVelocity(key_poses.back().endTrans()-key_poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
 //                        nullptr,
 //                        begin_trans.data(),end_trans.data()
 //                        );
 
-                Eigen::Quaterniond pre_quat_delta = poses.back().beginQuat().conjugate()*poses.back().endQuat();
+                Eigen::Quaterniond pre_quat_delta = key_poses.back().beginQuat().conjugate() * key_poses.back().endQuat();
                 pre_quat_delta.normalize();
-//                Eigen::Vector3d pre_trans_delta = poses.back().beginQuat().conjugate()* poses.back().endTrans()-
-//                        poses.back().beginQuat().conjugate()*poses.back().beginTrans();
-                Eigen::Vector3d pre_trans_delta = poses.back().endTrans() - poses.back().beginTrans();//in world axis
+//                Eigen::Vector3d pre_trans_delta = key_poses.back().beginQuat().conjugate()* key_poses.back().endTrans()-
+//                        key_poses.back().beginQuat().conjugate()*key_poses.back().beginTrans();
+                Eigen::Vector3d pre_trans_delta = key_poses.back().endTrans() - key_poses.back().beginTrans();//in world axis
 
 //                SE3  delta_pose = last_pose.begin_pose.inverse() * last_pose.end_pose;
 //                Eigen::Quaterniond pre_quat_delta = delta_pose.unit_quaternion();
@@ -563,7 +563,7 @@ public:
                 //curr_frame.update();
 
 
-                motion_evaluate = curr_frame.pose.compareDiff(poses.back());
+                motion_evaluate = curr_frame.pose.compareDiff(key_poses.back());
 
                 if(motion_evaluate ==0){
                     break;
@@ -585,7 +585,7 @@ public:
             local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),100);
             local_map.InsertPointCloud(curr_frame.cloud_world);
 
-            poses.push_back(curr_frame.pose);
+            key_poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();
             double map_cost = std::chrono::duration<double,std::milli>(map_end-map_start).count();
             ROS_INFO("MAP UPDATE COST: %f ms",map_cost);

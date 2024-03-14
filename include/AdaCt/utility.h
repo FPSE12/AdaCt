@@ -81,7 +81,7 @@ public:
 
     configParam(){
         nh.param<bool>("AdaCt/debug_print",debug_print,true);
-        nh.param<int>("AdaCt/lidar_type",lidar_type,1);
+        nh.param<int>("AdaCt/lidar_type",lidar_type,RS);
         nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/rslidar_points");
         nh.param<int>("AdaCt/initframeNum", initframe_num,20);
         nh.param<double>("AdaCT/map_resolution",map_resolution,0.5);

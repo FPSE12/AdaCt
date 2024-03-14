@@ -25,3 +25,5 @@ outdoor sipailou: 0.4 -0.52
 
 forest: downsample most is ground, 树干上的点大多邻居不够
 
+plane_wrong! 
+alpha always nan!

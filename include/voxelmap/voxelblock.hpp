@@ -238,7 +238,7 @@ struct VoxelBlock{
 
         description.normal = es.eigenvectors().col(0).normalized();
 
-
+        //sigma3>sigma2>sigma1
         double sigma_1 = sqrt(std::abs(es.eigenvalues()[2]));
         double sigma_2 = sqrt(std::abs(es.eigenvalues()[1]));
         double sigma_3 = sqrt(std::abs(es.eigenvalues()[0]));

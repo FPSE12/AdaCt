@@ -2,12 +2,14 @@
 
 #include "AdaCt/utility.h"
 #include "AdaCt/optPose.hpp"
-#include "voxelmap/voxelmap.hpp"
+#include "voxelmap/voxelmap_OctoTree.hpp"
 #include <opencv/cv.h>
 
-#define DOWNSAMPLE_VOXEL_SIZE 0.6
+#define DOWNSAMPLE_VOXEL_SIZE 0.4
 #define DOWNSAMPLE_EDGE_VOXEL_SIZE 0.2
 #define DOWNSAMPLE_PLANE_VOXEL_SIZE 0.4
+
+
 
 const bool pointcmp(PointXYZIRT &x, PointXYZIRT &y){return x.x * x.x + x.y*x.y+x.z*x.z < y.x*y.x+y.y*y.y+y.z*y.z;}
 const bool timelist(PointXYZIRT &x, PointXYZIRT &y){return x.timestamp < y.timestamp;}
@@ -25,6 +27,10 @@ public:
 
     pcl::PointCloud<PointXYZIRT>::Ptr ground_cloud;
     pcl::PointCloud<PointXYZIRT>::Ptr segment_cloud;
+
+    //use for calculate
+    std::vector<PointType> points;
+    std::vector<PointType> all_points;
 
 
     std::vector<double> timeVec;
@@ -52,6 +58,8 @@ public:
             {200., -1.}
     };
 
+    tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
+
 public:
 
     frame_info(){
@@ -69,6 +77,7 @@ public:
         ground_cloud.reset(new pcl::PointCloud<PointXYZIRT>());
         segment_cloud.reset(new pcl::PointCloud<PointXYZIRT>());
 
+        grid.clear();
 
         rangeMat = cv::Mat(N_SCAN, Horizon_SCAN, CV_32F, cv::Scalar::all(FLT_MAX));
 
@@ -100,7 +109,11 @@ public:
         //ROS_INFO("%f", cloud_ori->points[1].timestamp);
         cloud_world->clear();
         cloud_ori_downsample->clear();
+        points.clear();
+        all_points.clear();
         timeVec.resize(cloud_ori->size());
+
+
     }
 
 
@@ -119,6 +132,7 @@ public:
     void getTimeStamp(double & header,double & time_begin, double & time_end){
         sort(cloud_ori->points.begin(),cloud_ori->points.end(), timelist);
         headertime = header;
+
         timeStart = cloud_ori->points[0].timestamp;
         timeEnd = cloud_ori->points.back().timestamp;
 
@@ -237,26 +251,39 @@ public:
     }
 
 
-    void grid_sample_mid(double downsample_size){
-        tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
+    void  grid_sample_mid(double downsample_size){
+        cloud_ori_downsample->clear();
+        points.clear();
+        all_points.clear();
+
+        grid.clear();
+
+        //tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
+
         //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
         //int blind_voxel=ceil(blind/voxelSize);
-        for(auto point : cloud_ori->points){
+        for(auto  point : cloud_ori->points){
             //PointXYZIRT rawP = cloud_ori->points[i];
             //Eigen::Vector3d  raw_point(cloud_ori->points[i].x,cloud_ori->points[i].y,cloud_ori->points[i].z);
             //double timestamp = cloud_ori->points[i].timestamp;
+            if(!std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
+                continue;
+            }
             double dis = std::sqrt( point.x * point.x + point.y * point.y + point.z * point.z);
             voxel.x = static_cast<short>(point.x / downsample_size);
+            if(voxel.x<0) voxel.x--;
             voxel.y = static_cast<short>(point.y / downsample_size);
+            if(voxel.y<0) voxel.y--;
             voxel.z = static_cast<short>(point.z / downsample_size);
-            if(dis< blind || !std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
+            if(voxel.z<0) voxel.z--;
+            if(dis< blind){
                 continue;
             }
 
             grid[voxel].addPoint(point);
         }
-        cloud_ori_downsample->clear();
+
 
         for(const auto &[_,voxel_block] : grid) {
 
@@ -264,6 +291,13 @@ public:
             PointXYZIRT midP = voxel_block.findCloseToMid();//use the const? cannot change the var in object(const auto used in above)
 
             cloud_ori_downsample->points.push_back(midP);
+
+            PointType p;
+            p.point<<midP.x, midP.y, midP.z;
+            p.timestamp = midP.timestamp;
+            p.alpha = (p.timestamp - timeStart)/(timeEnd - timeStart);
+            p.intensity = midP.intensity;
+            points.push_back(p);
         }
         //ROS_INFO("DOWN:%d",cloud_ori_downsample->points.size());
 
@@ -272,9 +306,10 @@ public:
 
     void Adaptive_sample_mid(){
         std::vector<tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>>> indices_map(distance_voxel_size.size());
-
-        for(auto point : cloud_ori->points){
-            if(!std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
+        points.clear();
+        cloud_ori_downsample->clear();
+        for(auto point : cloud_ori->points){//do not use the & ,may bechange in point
+            if(!std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z) || !std::isfinite(point.timestamp)){
                 continue;
             }
             double dis = std::sqrt(point.x * point.x + point.y * point.y + point.z * point.z);
@@ -302,6 +337,17 @@ public:
             for(const auto & [_, voxelblock] : grid_map){
                 PointXYZIRT midP = voxelblock.findCloseToMid();
                 cloud_ori_downsample->points.push_back(midP);
+
+                PointType p;
+                p.point<<midP.x, midP.y, midP.z;
+                p.timestamp = midP.timestamp;
+                p.alpha = (p.timestamp - timeStart)/(timeEnd - timeStart);
+                if(!isfinite(p.alpha)){
+                    ROS_ERROR("alpha wrong! %f",p.alpha);//-----------error-------
+                    ROS_ERROR("time_start: %f, timeEnd: %f, timestamp:%f", timeStart, timeEnd, p.timestamp);
+                }
+                p.intensity = midP.intensity;
+                points.push_back(p);
             }
 
         }
@@ -311,10 +357,14 @@ public:
 
     void updateWorldCloud(){
         cloud_world->clear();
+        all_points.clear();
         //cloud_world->resize(cloud_ori->size());
         int count=0;
-        for(auto point : cloud_ori->points){
+        for(auto & point : cloud_ori->points){
             count++;
+            if(count%5|| !isfinite(point.x) || !isfinite(point.y) || !isfinite(point.z)){
+                continue;
+            }
 //            if(point.ring>20){
 //                if(count % 5) continue;//20
 //            }
@@ -332,41 +382,26 @@ public:
             temp.y=temp_P[1];
             temp.z=temp_P[2];
 
-            //千万不能用push_back，会在size的基础上进行增加
             cloud_world->points.push_back(temp);
 
+            PointType p;
+            p.point<<point.x,point.y,point.z;
+            p.point_world<<temp_P[0], temp_P[1], temp_P[2];
+            p.intensity = temp.intensity;
+            all_points.push_back(p);
 
         }
         return;
     }
+
     void updateFromDownSample(){
         cloud_world->clear();
 //        cloud_world->resize(cloud_ori_downsample->size());
 //        cloud_deskew->clear();
 //        cloud_deskew->resize(cloud_ori_downsample->size());
-        for(auto point : cloud_ori_downsample->points){
-
+        for(int i=0;i<cloud_ori_downsample->size();i++){
+            PointXYZIRT point = cloud_ori_downsample->points[i];
             double alpha=(point.timestamp-timeStart)/(timeEnd-timeStart);
-
-//            POSE inter_pose=pose.linearInplote(alpha);
-//            V3D temp_P(temp.x,temp.y,temp.z);
-//            temp_P = inter_pose.first * temp_P + inter_pose.second;
-//
-//
-//            temp.x=temp_P[0];
-//            temp.y=temp_P[1];
-//            temp.z=temp_P[2];
-//
-//            //千万不能用push_back，会在size的基础上进行增加
-//            cloud_world->points[i]=temp;
-////
-//            temp_P = pose.end_pose.inverse() * temp_P;
-////
-//            temp.x=temp_P[0];
-//            temp.y=temp_P[1];
-//            temp.z=temp_P[2];
-//
-//            cloud_deskew->points[i]=temp;
 
             SE3 temp_T_world=pose.linearInplote(alpha);
             V3D temp_P(point.x,point.y,point.z);
@@ -376,6 +411,8 @@ public:
             point.y=temp_P[1];
             point.z=temp_P[2];
 
+            //update points for update map
+            points[i].point_world<<temp_P[0],temp_P[1],temp_P[2];
             //千万不能用push_back，会在size的基础上进行增加
             cloud_world->push_back(point);
 
@@ -411,6 +448,9 @@ public:
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
         cloud_world.reset(new pcl::PointCloud<PointXYZIRT>());
         cloud_ori_downsample.reset(new pcl::PointCloud<PointXYZIRT>());
+
+        points.clear();
+        all_points.clear();
     }
     ~frame_info(){};
 

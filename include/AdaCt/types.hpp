@@ -20,6 +20,16 @@
 #include <pcl/filters/impl/statistical_outlier_removal.hpp>
 
 
+struct PointVelodyne{
+    PCL_ADD_POINT4D;                // pcl宏定义，加入点的坐标
+    PCL_ADD_INTENSITY;              // pcl宏定义，加入强度
+    uint16_t ring;                  // ring
+    float time;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+}EIGEN_ALIGN16;
+
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointVelodyne,
+                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint16_t, ring, ring)(float, time, time))
 
 //---------------------pointType-----------------------------------------
 struct PointXYZIRT
@@ -34,7 +44,61 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIRT,
                                   (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint16_t, ring, ring)(double, timestamp, timestamp))
 
 
+//struct common point type
+typedef struct CommonPointType{
+    Eigen::Vector3d point;
+    Eigen::Vector3d point_world;
+    uint16_t ring;
+    double timestamp;
+    float intensity;
+    //others property
+    Eigen::Matrix3d cov;
+    double alpha;
+
+} PointType;
+
+//plane
+typedef struct Plane {
+    Eigen::Vector3d center;
+    Eigen::Vector3d normal;
+    Eigen::Vector3d y_normal;
+    Eigen::Vector3d x_normal;
+    Eigen::Matrix3d covariance;
+    Eigen::Matrix<double, 6, 6> plane_cov;
+    float radius = 0;
+    float min_eigen_value = 1;
+    float mid_eigen_value = 1;
+    float max_eigen_value = 1;
+    float d = 0;//ax+by+cz+d=1 方程中的d
+    double A2D;
+    int points_size = 0;
+
+    bool is_plane = false;
+    bool is_init = false;
+    int id;
+    // is_update and last_update_points_size are only for publish plane
+    bool is_update = false;
+    int last_update_points_size = 0;
+    bool update_enable = true;
+} Plane;
+
+typedef struct ptpl {
+    Eigen::Vector3d point;
+    Eigen::Vector3d point_world;
+    Eigen::Vector3d normal;
+    Eigen::Vector3d center;
+    Eigen::Matrix<double, 6, 6> plane_cov;
+    double d;
+    double point_alpha;
+    double A2D;
+    int layer;
+} ptpl;
+
 //---------------------------------------quat to euler--------------------
+
+
+
+
 struct EulerAngles {
     double roll, pitch, yaw;
 };

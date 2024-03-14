@@ -65,7 +65,7 @@ public:
     // opt pose
 //    OptPose pre_pose, curr_pose;
 
-    std::vector<OptPoseMultiMode> poses;
+    std::vector<OptPoseMultiMode> key_poses;
     std::vector<double> timeVec;
     int iter_nums; // 5
     int node_num;
@@ -235,20 +235,20 @@ public:
         curr_frame.setOricloud(cloud_ori);
         if(frame_count<=1){
             curr_frame.normalize();
-            //poses.push_back(curr_frame.pose);
+            //key_poses.push_back(curr_frame.pose);
         }else{
 
-//            curr_frame.pose.begin_pose = poses[frame_count].begin_pose *(poses[frame_count-1].begin_pose.inverse() * poses[frame_count].begin_pose);
-//            curr_frame.pose.end_pose = poses[frame_count].end_pose * (poses[frame_count-1].end_pose.inverse() * poses[frame_count].end_pose);
-//            curr_frame.pose.begin_pose = poses.back().end_pose;
-//            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-              curr_frame.Propagate(poses.back());
+//            curr_frame.pose.begin_pose = key_poses[frame_count].begin_pose *(key_poses[frame_count-1].begin_pose.inverse() * key_poses[frame_count].begin_pose);
+//            curr_frame.pose.end_pose = key_poses[frame_count].end_pose * (key_poses[frame_count-1].end_pose.inverse() * key_poses[frame_count].end_pose);
+//            curr_frame.pose.begin_pose = key_poses.back().end_pose;
+//            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse()*key_poses.back().end_pose);
+              curr_frame.Propagate(key_poses.back());
         }
 
-//        curr_frame.pose.begin_pose = poses.back().end_pose;
-//        //curr_frame.pose.end_pose = poses[frame_count-1].end_pose * poses[frame_count-2].end_pose.inverse() * poses[frame_count-1].end_pose;
-//        curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-//        curr_frame.pose=poses.back();
+//        curr_frame.pose.begin_pose = key_poses.back().end_pose;
+//        //curr_frame.pose.end_pose = key_poses[frame_count-1].end_pose * key_poses[frame_count-2].end_pose.inverse() * key_poses[frame_count-1].end_pose;
+//        curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse()*key_poses.back().end_pose);
+//        curr_frame.pose=key_poses.back();
 
 
         //curr_frame.downSampleOriCloud();
@@ -271,7 +271,7 @@ public:
             }
 
             frame_count++;
-            ROS_INFO("frame_id:%d",frame_count);
+            ROS_INFO("---------------------------------------------------frame_id:%d",frame_count);
             // get pcl cloud
             cloud_ori_ros = std::move(rosCloudQue.front());
             rosCloudQue.pop_front();
@@ -304,7 +304,7 @@ public:
 
                 local_map.InsertPointCloud(curr_frame.cloud_ori);
 
-                poses.push_back(curr_frame.poses);
+                key_poses.push_back(curr_frame.poses);
 
                 first_flag = false;
 
@@ -426,7 +426,7 @@ public:
 //                }
                 //add other constraints
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
-                                                 new LocationConsistency(poses.back().endQuat(),poses.back().endTrans(),std::sqrt(opt_num*0.01))),
+                                                 new LocationConsistency(key_poses.back().endQuat(), key_poses.back().endTrans(), std::sqrt(opt_num * 0.01))),
                                          nullptr,
                                          begin_quat.coeffs().data(),begin_trans.data()
 
@@ -434,9 +434,9 @@ public:
                 //v consist
 
                 //change the vector
-                Eigen::Quaterniond pre_quat_delta = poses.back().poses[1].unit_quaternion().conjugate()*poses.back().endQuat();
+                Eigen::Quaterniond pre_quat_delta = key_poses.back().poses[1].unit_quaternion().conjugate() * key_poses.back().endQuat();
                 pre_quat_delta.normalize();
-                Eigen::Vector3d pre_trans_delta =  poses.back().endTrans() - poses.back().poses[1].translation();
+                Eigen::Vector3d pre_trans_delta = key_poses.back().endTrans() - key_poses.back().poses[1].translation();
 
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocityRotTran,6,4,4,3,3>(
                                                  new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.01))),
@@ -487,8 +487,8 @@ public:
 
 
 
-//                if(curr_frame.pose.compareDiff(poses.back())) {
-//                    poses.push_back(curr_frame.pose);
+//                if(curr_frame.pose.compareDiff(key_poses.back())) {
+//                    key_poses.push_back(curr_frame.pose);
 //                    break;
 //                }
 
@@ -504,7 +504,7 @@ public:
             curr_frame.updateFromDownSample();
             local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),100);
             local_map.InsertPointCloud(curr_frame.cloud_world);
-            poses.push_back(curr_frame.poses);
+            key_poses.push_back(curr_frame.poses);
             auto map_end = std::chrono::steady_clock::now();
             if(debug_print){
                 ROS_INFO("cloud find neighbor COST: %f ms",findNeighbor_average);

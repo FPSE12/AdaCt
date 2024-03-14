@@ -40,7 +40,10 @@ public:
     std::deque<sensor_msgs::PointCloud2> rosCloudQue;
     sensor_msgs::PointCloud2 cloud_ori_ros;
     pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori;
+    pcl::PointCloud<PointVelodyne>::Ptr cloud_vel;
     pcl::PointCloud<PointXYZIRT>::Ptr cloud_valid;
+
+    pcl::PointCloud<PointXYZIRT>::Ptr cloud_last;
 
     //global map
     pcl::PointCloud<PointXYZIRT>::Ptr globalMap;
@@ -64,13 +67,14 @@ public:
     // opt pose
 //    OptPose pre_pose, curr_pose;
 
-    std::vector<OptPose> poses;
+    std::vector<OptPose> key_poses;
     OptPose last_pose;
     int iter_nums; // 5
 
     int motion_evaluate;
 
     double a2d_average;
+
 
 
     Lidar_odo()
@@ -88,6 +92,9 @@ public:
 
         cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
         cloud_valid.reset(new pcl::PointCloud<PointXYZIRT>());
+        cloud_vel.reset(new pcl::PointCloud<PointVelodyne>());
+        cloud_last.reset(new pcl::PointCloud<PointXYZIRT>());
+
 
         first_flag = true;
         frame_count =-1;
@@ -115,6 +122,20 @@ public:
         //preprocess();
     }
 
+    void changeCloudFormat(pcl::PointCloud<PointVelodyne>::Ptr vel, pcl::PointCloud<PointXYZIRT>::Ptr rs, double headertime){
+        for(auto & point_vel : vel->points){
+            PointXYZIRT point_rs;
+            point_rs.x = point_vel.x;
+            point_rs.y = point_vel.y;
+            point_rs.z = point_vel.z;
+            point_rs.ring = point_vel.ring;
+            point_rs.intensity = point_vel.intensity;
+            point_rs.timestamp =(double) point_vel.time + headertime;
+//            ROS_INFO("TIMESTAMP: %f",point_rs.timestamp);
+            rs->push_back(point_rs);
+        }
+    }
+
     void Initframe()
     {
         curr_frame.Reset();
@@ -122,21 +143,23 @@ public:
         curr_frame.setOricloud(cloud_ori);
         if(frame_count<1){
             curr_frame.pose.initialMotion();
-            //poses.push_back(curr_frame.pose);
+            //key_poses.push_back(curr_frame.pose);
         }else{
 
-//            curr_frame.pose.begin_pose = poses[frame_count].begin_pose *(poses[frame_count-1].begin_pose.inverse() * poses[frame_count].begin_pose);
-//            curr_frame.pose.end_pose = poses[frame_count].end_pose * (poses[frame_count-1].end_pose.inverse() * poses[frame_count].end_pose);
-            //OptPose last_pose = poses.back();
-            curr_frame.pose.begin_pose = poses.back().end_pose;
-            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
-            //curr_frame.pose.end_pose = poses.back().end_pose *(poses[poses.size()-2].end_pose.inverse() * poses.back().end_pose);
+//            curr_frame.pose.begin_pose = key_poses[frame_count].begin_pose *(key_poses[frame_count-1].begin_pose.inverse() * key_poses[frame_count].begin_pose);
+//            curr_frame.pose.end_pose = key_poses[frame_count].end_pose * (key_poses[frame_count-1].end_pose.inverse() * key_poses[frame_count].end_pose);
+            //OptPose last_pose = key_poses.back();
+            curr_frame.pose.begin_pose = key_poses.back().end_pose;
+            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse() * key_poses.back().end_pose);
+            //curr_frame.pose.end_pose = key_poses.back().end_pose *(key_poses[key_poses.size()-2].end_pose.inverse() * key_poses.back().end_pose);
         }
         curr_frame.getTimeStamp(headertime,timeStart,timeEnd);
-        curr_frame.Segment();
+        //curr_frame.Segment();
+        curr_frame.findRingStartEnd();
         publishCloud(cloud_pub,curr_frame.segment_cloud,ros::Time(headertime),"odometry");
-        curr_frame.grid_sample_mid(DOWNSAMPLE_VOXEL_SIZE);
+//        curr_frame.grid_sample_mid(DOWNSAMPLE_VOXEL_SIZE);
 
+        curr_frame.Adaptive_sample_mid();
     }
 
     bool SearchNeighbor_(const Voxelmap<PointXYZIRT> &local_map, const Eigen::Vector3d & PointW,
@@ -273,6 +296,8 @@ public:
         }
     }
 
+
+
     void preprocess()
     {
         ros::Rate r(100);//100Hz
@@ -296,7 +321,20 @@ public:
             cloud_ori_ros = std::move(rosCloudQue.front());
             rosCloudQue.pop_front();
 
-            pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
+            headertime = cloud_ori_ros.header.stamp.toSec();
+
+            cloud_ori->clear();
+            cloud_vel->clear();
+
+            if(lidar_type == VLP){
+                //ROS_INFO("VLP");
+                pcl::moveFromROSMsg(cloud_ori_ros,*cloud_vel);
+                changeCloudFormat(cloud_vel,cloud_ori,headertime);
+
+            }else{
+                pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
+            }
+
 //           ---------------------------------------------------init------------------------------------
             auto initframe_start = std::chrono::steady_clock::now();
 
@@ -310,7 +348,7 @@ public:
                 local_map.InsertPointCloud(cloud_ori);
 
 //                last_pose=curr_frame.pose;
-                poses.push_back(curr_frame.pose);
+                key_poses.push_back(curr_frame.pose);
                 //ROS_INFO("2");
                 first_flag = false;
 
@@ -326,8 +364,8 @@ public:
 
 
             // init frame_info
-            headertime = cloud_ori_ros.header.stamp.toSec();
-            last_pose = poses.back();
+
+            last_pose = key_poses.back();
 
             Initframe();
             //cloud_ori->clear();
@@ -493,19 +531,20 @@ public:
 
                 //add other constraints
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
-                        new LocationConsistency(poses.back().endQuat(),poses.back().endTrans(),std::sqrt(opt_num*0.01))),
+                        new LocationConsistency(key_poses.back().endQuat(), key_poses.back().endTrans(), std::sqrt(opt_num * 0.01))),
                                          nullptr,
                                          begin_quat.coeffs().data(),begin_trans.data()
 
                         );
 //                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocity,3,3,3>(
-//                        new ConstantVelocity(poses.back().endTrans()-poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
+//                        new ConstantVelocity(key_poses.back().endTrans()-key_poses.back().beginTrans(),std::sqrt(opt_num*0.001))),
 //                        nullptr,
 //                        begin_trans.data(),end_trans.data()
 //                        );
 
                 //add disconnecty
 //                int disconnecty = curr_frame.first_line.size();
+//                ROS_INFO("disconnecty:%d",disconnecty);
 //                for(int i=0;i<disconnecty;i++){
 //                    double alpha1 = (curr_frame.timestamp_line[i].first - timeStart) / (timeEnd - timeStart);
 //                    double alpha2 = (curr_frame.timestamp_line[i].second - timeStart) / (timeEnd - timeStart);
@@ -517,18 +556,18 @@ public:
 //                    );
 //                }
 
-                Eigen::Quaterniond pre_quat_delta = poses.back().beginQuat().conjugate()*poses.back().endQuat();
+                Eigen::Quaterniond pre_quat_delta = key_poses.back().beginQuat().conjugate() * key_poses.back().endQuat();
                 pre_quat_delta.normalize();
-//                Eigen::Vector3d pre_trans_delta = poses.back().beginQuat().conjugate()* poses.back().endTrans()-
-//                        poses.back().beginQuat().conjugate()*poses.back().beginTrans();
-                Eigen::Vector3d pre_trans_delta = poses.back().endTrans() - poses.back().beginTrans();//in world axis
+//                Eigen::Vector3d pre_trans_delta = key_poses.back().beginQuat().conjugate()* key_poses.back().endTrans()-
+//                        key_poses.back().beginQuat().conjugate()*key_poses.back().beginTrans();
+                Eigen::Vector3d pre_trans_delta = key_poses.back().endTrans() - key_poses.back().beginTrans();//in world axis
 
 //                SE3  delta_pose = last_pose.begin_pose.inverse() * last_pose.end_pose;
 //                Eigen::Quaterniond pre_quat_delta = delta_pose.unit_quaternion();
 //                Eigen::Vector3d pre_trans_delta = delta_pose.translation();
 
                 problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocityRotTran,6,4,4,3,3>(
-                        new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.01))),
+                        new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.001))),
                                          nullptr,
                         begin_quat.coeffs().data(),end_quat.coeffs().data(),begin_trans.data(),end_trans.data()
                         );
@@ -565,7 +604,7 @@ public:
                 //curr_frame.update();
 
 
-                motion_evaluate = curr_frame.pose.compareDiff(poses.back());
+                motion_evaluate = curr_frame.pose.compareDiff(key_poses.back());
 
                 if(motion_evaluate ==0){
                     break;
@@ -578,12 +617,12 @@ public:
 //          --------------------------------------update local_map---------------------------------------
             auto map_start = std::chrono::steady_clock::now();
 //            curr_frame.updateWorldCloud();
-            //pcl::copyPointCloud(*cloud_valid,*curr_frame.cloud_ori_downsample );
+//            pcl::copyPointCloud(*cloud_valid,*curr_frame.cloud_ori_downsample );
             curr_frame.updateFromDownSample();
             local_map.RemoveFarFromLocation(curr_frame.getEndTrans(),100);
             local_map.InsertPointCloud(curr_frame.cloud_world);
 
-            poses.push_back(curr_frame.pose);
+            key_poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();
             double map_cost = std::chrono::duration<double,std::milli>(map_end-map_start).count();
             ROS_INFO("MAP UPDATE COST: %f ms",map_cost);

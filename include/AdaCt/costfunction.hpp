@@ -6,12 +6,13 @@
 #include <ceres/local_parameterization.h>
 #include <Eigen/Dense>
 
+#define PI 3.1415926
 
 struct point2planeFunction
 {
     /* data */
-    point2planeFunction(const V3D &raw, const Eigen::Vector4d &pabcd,
-                        double weight) : raw_points_(raw), pabcd_(pabcd), weight_(weight) {}
+    point2planeFunction(const V3D &raw, const Eigen::Vector4d &pabcd, double weight, Eigen::Vector3d matrix)
+            : raw_points_(raw), pabcd_(pabcd), weight_(weight) {}
     
     template<class T>
     bool operator()(const T * const linearInplot_pose_s, T * residual) const{
@@ -151,8 +152,10 @@ struct Disconnecty{
         Eigen::Map<Eigen::Quaternion<T>> end_quat(const_cast <T*>(end_r));
 //        Eigen::Map<Eigen::Matrix<T,3,1>> begin_tran(const_cast <T*>(begin_t));
 //        Eigen::Map<Eigen::Matrix<T,3,1>> end_tran(const_cast <T*>(end_t));
-        Eigen::Quaternion<T> quat_inter1=begin_quat.normalized().slerp(T(0.0),end_quat.normalized());
-        Eigen::Quaternion<T> quat_inter2=begin_quat.normalized().slerp(T(1.0),end_quat.normalized());
+        Eigen::Quaternion<T> quat_inter1=begin_quat.normalized().slerp(T(alpha1),end_quat.normalized());
+        Eigen::Quaternion<T> quat_inter2=begin_quat.normalized().slerp(T(alpha2),end_quat.normalized());
+
+        Eigen::Quaternion<T> quat_rotate(T(cos(0.2/180.0 * PI)),T(0.0),T(0.0),T(sin(0.2/180.0 * PI)));
 //        Eigen::Map<Eigen::Matrix<T,3,32>> residual_map(residual);
         Eigen::Quaternion<T> delta = quat_inter1.conjugate() * quat_inter2;
 //        Eigen::Matrix<T,3,1> delta_t = end_tran - begin_tran;
@@ -180,6 +183,47 @@ private:
     double alpha2;
 };
 
+
+//-----------------------for scan2scan-------------------------
+struct  Point2pointFunctor{
+    Point2pointFunctor(double alpha_, double weight_, const V3D & s_point_, const V3D& t_point_):
+    alpha(alpha_), weight(weight_), s_point(s_point_), t_point(t_point_){}
+
+    template<class T>
+    bool operator()( const T *const begin_rot,
+                     const T *const end_rot, const T * const begin_trans,  const T * const end_trans,T * residual)const{
+
+        Eigen::Map<Eigen::Quaternion<T>> quat_begin(const_cast<T *>(begin_rot));
+        Eigen::Map<Eigen::Quaternion<T>> quat_end(const_cast<T *>(end_rot));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_begin(const_cast<T *>(begin_trans));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_end(const_cast<T *>(end_trans));
+        Eigen::Quaternion<T> quad_inter=quat_begin.normalized().slerp(T(alpha),quat_end.normalized());
+
+        Eigen::Matrix<T, 3, 1> tr;
+
+        tr(0, 0) = (1-alpha) * trans_begin(0,0) + alpha * trans_end(0,0);
+        tr(1, 0) = (1-alpha) * trans_begin(1,0) + alpha * trans_end(1,0);
+        tr(2, 0) = (1-alpha) * trans_begin(2,0) + alpha * trans_end(2,0);
+
+        Eigen::Matrix<T,3,1> world_points= quad_inter.normalized() * t_point.template cast<T>() + tr;
+
+        residual[0] =T( weight) *((T(s_point[0])-world_points[0])*(T(s_point[0])-world_points[0])
+                +(T(s_point[1])-world_points[1])*(T(s_point[1])-world_points[1])
+                +(T(s_point[2])-world_points[2])*(T(s_point[2])-world_points[2])
+                );
+
+
+
+        return true;
+    }
+private:
+    Eigen::Vector3d s_point;
+    Eigen::Vector3d t_point;
+    double alpha;
+    double weight;
+};
+
+//----------------------for scan2map----------------------
 struct CTFunctor{
     
     CTFunctor(double alpha,const V3D &raw_point,const Eigen::Vector4d& pabcd, double weight)
@@ -325,6 +369,58 @@ struct CTFunctor3{
     double alpha_;
     V3D raw_points_;
     V3D ref_points_;
+    Eigen::Vector3d  normal_;
+    double weight_;
+    //FunctorT func;
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+};
+
+
+
+//----------------------for multiResolution ------------------
+struct CTFunctor4{
+    CTFunctor4(double alpha,const V3D &raw_point,double D_, double weight, V3D normal)
+            :alpha_(alpha),raw_points_(raw_point),D(D_),weight_(weight),normal_(normal) {}
+
+
+    template<class T>//必须使用模板
+    bool operator()( const T *const begin_rot,
+                     const T *const end_rot, const T * const begin_trans,  const T * const end_trans,T * residual)const{
+
+        Eigen::Map<Eigen::Quaternion<T>> quat_begin(const_cast<T *>(begin_rot));
+        Eigen::Map<Eigen::Quaternion<T>> quat_end(const_cast<T *>(end_rot));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_begin(const_cast<T *>(begin_trans));
+        Eigen::Map<Eigen::Matrix<T,3,1>> trans_end(const_cast<T *>(end_trans));
+        Eigen::Quaternion<T> quad_inter=quat_begin.normalized().slerp(T(alpha_),quat_end.normalized());
+
+        quad_inter.normalize();
+
+        Eigen::Matrix<T, 3, 1> tr;
+
+        tr(0, 0) = (1-alpha_) * trans_begin(0,0) + alpha_ * trans_end(0,0);
+        tr(1, 0) = (1-alpha_) * trans_begin(1,0) + alpha_ * trans_end(1,0);
+        tr(2, 0) = (1-alpha_) * trans_begin(2,0) + alpha_ * trans_end(2,0);
+
+        Eigen::Matrix<T,3,1> world_points= quad_inter* raw_points_.template cast<T>() + tr;
+
+        T product = world_points.transpose() * normal_.template cast<T>() ;//如何使用绝对值i？
+
+        //T product = world_points[1] * T(normal_[1]) + world_points[2]* T(normal_[2]) + world_points[3] * T(normal_[3]) + T(D);
+        residual[0] = T(weight_) * (product + T(D)) / T(normal_.norm());
+
+
+
+        return true;
+    }
+
+
+
+
+
+    double alpha_;
+    V3D raw_points_;
+    double D;
     Eigen::Vector3d  normal_;
     double weight_;
     //FunctorT func;

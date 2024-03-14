@@ -2,8 +2,13 @@ cmake_minimum_required(VERSION 3.0.2)
 project(AdaCt)
 
 SET(CMAKE_BUILD_TYPE "Debug")
+
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 #add_compile_options(-std=c++17)
+
+#add varirant
+add_definitions(-DDEBUG_PRINT=\"FALSE\")
 
 ADD_COMPILE_OPTIONS(-std=c++17 )
 ADD_COMPILE_OPTIONS(-std=c++17 )
@@ -144,6 +149,31 @@ target_link_libraries(lidar_odometry_voxelmap
         #OpenMP::OpenMP_CXX
         ${OpenMP_CXX_FLAGS}
         )
+
+add_executable(lidar_odometry_multiResolution_voxelmap src/lidar_odometry_multiResolution_voxelmap.cpp )
+target_link_libraries(lidar_odometry_multiResolution_voxelmap
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        #OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
+        ${OpenCV_LIBRARIES}
+        )
+
+add_executable(lidar_odometry_trajectory src/lidar_odometry_trajectory.cpp )
+target_link_libraries(lidar_odometry_trajectory
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        #OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
+        ${OpenCV_LIBRARIES}
+        )
+
 
 add_executable(lidar_odometry_voxelmap_segment src/lidar_odometry_voxelmap_segment.cpp )
 target_link_libraries(lidar_odometry_voxelmap_segment

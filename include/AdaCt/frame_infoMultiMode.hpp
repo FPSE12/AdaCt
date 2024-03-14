@@ -544,7 +544,7 @@ public:
 
     void Propagate(OptPoseMultiMode last){
         if(last.size()!=poses.size()){
-            ROS_WARN("last poses cannot match curr");
+            ROS_WARN("last key_poses cannot match curr");
             return;
         }
         poses[0]=last.back();

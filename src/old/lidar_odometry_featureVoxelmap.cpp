@@ -85,7 +85,7 @@ public:
     // opt pose
 //    OptPose pre_pose, curr_pose;
 
-    std::vector<OptPose> poses;
+    std::vector<OptPose> key_poses;
     SE3 last2curr;
     int iter_nums; // 5
 
@@ -174,10 +174,10 @@ public:
         curr_frame.setOricloud(cloud_ori);
         if(frame_count<=1){
             curr_frame.pose.initialMotion();
-            //poses.push_back(curr_frame.pose);
+            //key_poses.push_back(curr_frame.pose);
         }else{
-            curr_frame.pose.begin_pose = poses.back().end_pose;
-            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(poses.back().begin_pose.inverse()*poses.back().end_pose);
+            curr_frame.pose.begin_pose = key_poses.back().end_pose;
+            curr_frame.pose.end_pose = curr_frame.pose.begin_pose *(key_poses.back().begin_pose.inverse() * key_poses.back().end_pose);
 //            curr_frame.pose.end_pose =  curr_frame.pose.begin_pose *last2curr;
         }//need init with the curr cloud with last cloud
 
@@ -497,7 +497,7 @@ public:
 
                 feature_map.InsertPointCloud(features);
 
-                poses.push_back(curr_frame.pose);
+                key_poses.push_back(curr_frame.pose);
 
                 first_flag = false;
 
@@ -590,13 +590,13 @@ public:
                 }
                 //add other constraints
 //                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,3,3>(
-//                                                 new LocationConsistency(poses.back().endTrans(),std::sqrt((opt_edge_num+opt_plane_num)*0.001))),
+//                                                 new LocationConsistency(key_poses.back().endTrans(),std::sqrt((opt_edge_num+opt_plane_num)*0.001))),
 //                                         nullptr,
 //                                         begin_trans.data()
 //
 //                );
 //                problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocity,3,3,3>(
-//                                                 new ConstantVelocity(poses.back().endTrans()-poses.back().beginTrans(),std::sqrt((opt_edge_num+opt_plane_num)*0.001))),
+//                                                 new ConstantVelocity(key_poses.back().endTrans()-key_poses.back().beginTrans(),std::sqrt((opt_edge_num+opt_plane_num)*0.001))),
 //                                         nullptr,
 //                                         begin_trans.data(),end_trans.data()
 //                );
@@ -628,8 +628,8 @@ public:
                 //curr_frame.update();
 
 
-                if(curr_frame.pose.compareDiff(poses.back())) {
-                    poses.push_back(curr_frame.pose);
+                if(curr_frame.pose.compareDiff(key_poses.back())) {
+                    key_poses.push_back(curr_frame.pose);
                     break;
                 }
 
@@ -663,7 +663,7 @@ public:
 //            feature_map.InsertPointCloud(curr_frame.plane_world,curr_frame.pose);
 //            feature_map.InsertPointCloud(curr_frame.edge_world,curr_frame.pose);
 
-            poses.push_back(curr_frame.pose);
+            key_poses.push_back(curr_frame.pose);
             auto map_end = std::chrono::steady_clock::now();
             double map_update = std::chrono::duration<double,std::milli>(map_end-map_start).count();
             ROS_INFO("MAP UPDATE COST: %f ms",map_update);

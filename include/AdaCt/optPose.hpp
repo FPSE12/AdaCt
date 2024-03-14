@@ -29,11 +29,10 @@ public:
     }
 
     void initialMotion(){
-        begin_pose.setRotationMatrix(Sophus::Matrix3d::Identity());
-        begin_pose.trans(0,0,0);
+        //begin_pose.setRotationMatrix(Sophus::Matrix3d::Identity());
+        begin_pose = SE3(Sophus::Matrix3d::Identity(),Sophus::Vector3d(0,0,0));
 
-        end_pose.setRotationMatrix(Sophus::Matrix3d::Identity());
-        end_pose.trans(0,0,0);
+        end_pose = SE3(Sophus::Matrix3d::Identity(), Sophus::Vector3d(0,0,0));
 
     }
 
@@ -100,7 +99,7 @@ public:
         double delta_trans = (other_trans-this_tran).norm();
 
         if(delta_thate < 0.05 && delta_trans < 0.01) return 0;
-        if(delta_thate > 5 || delta_trans > 0.5) return 2;//see ct-icp's motion threshold
+        if(delta_thate > 10 || delta_trans > 0.3) return 2;//see ict-icp's motion threshold
 
         return 1;
     }
