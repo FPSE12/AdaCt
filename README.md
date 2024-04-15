@@ -25,5 +25,12 @@ outdoor sipailou: 0.4 -0.52
 
 forest: downsample most is ground, 树干上的点大多邻居不够
 
-plane_wrong! 
-alpha always nan!
+multiNode&&resolution: always update, liwenzhenghuan is also wrong
+                        but indoor is better than keypose_update
+
+2-1:
+multiresolution :  better than else;
+mutlmode : can work
+
+
+three node : 体素地图效果好一点，多分辨率实时性更高效果差一点（人的影响）

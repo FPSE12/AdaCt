@@ -159,9 +159,9 @@ public:
         curr_frame.timeEnd = timeE;
 
         publishCloud(cloud_pub,curr_frame.segment_cloud,ros::Time(headertime),"odometry");
-//        curr_frame.grid_sample_mid(DOWNSAMPLE_VOXEL_SIZE);
+//        curr_frame.grid_sample_mid_in_pcl(DOWNSAMPLE_VOXEL_SIZE);
 
-        curr_frame.Adaptive_sample_mid();
+        curr_frame.Adaptive_sample_mid_in_pcl();
     }
 
     bool SearchNeighbor_(const Voxelmap<PointXYZIRT> &local_map, const Eigen::Vector3d & PointW,
@@ -303,7 +303,7 @@ public:
                      pcl::PointCloud<PointXYZIRT>::Ptr SegCloud){
         SegCloud->clear();
 
-        if(timeSegBegin < timeStart || timeSegEnd > timeEnd || timeSegBegin < timeSegBegin){
+        if(timeSegBegin < timeStart || timeSegEnd > timeEnd || timeSegEnd < timeSegBegin){
             ROS_ERROR("cloud Seg false! timeSegBegin: %f, timeSegEnd: %f, timeStart: %f, timeEnd:%f ", timeSegBegin,
                       timeSegEnd,timeStart,timeEnd);
             ROS_BREAK();
@@ -344,7 +344,7 @@ public:
 
             Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
             Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans();
-            Eigen::Quaterniond end_quat = curr_frame.endQaut();
+            Eigen::Quaterniond end_quat = curr_frame.endQuat();
             Eigen::Vector3d end_trans = curr_frame.getEndTrans();
 
 
@@ -573,6 +573,8 @@ public:
             rosCloudQue.pop_front();
 
             headertime = cloud_ori_ros.header.stamp.toSec();
+            timeStart = 0.0;
+            timeEnd = 0.0;
 
             cloud_ori->clear();
             cloud_vel->clear();
@@ -657,10 +659,10 @@ public:
         nav_msgs::Odometry odometry_pose;
         odometry_pose.header.stamp = ros::Time(headertime);
         odometry_pose.header.frame_id = odometry_frame;
-        odometry_pose.pose.pose.orientation.w = curr_frame.endQaut().w();
-        odometry_pose.pose.pose.orientation.x = curr_frame.endQaut().x();
-        odometry_pose.pose.pose.orientation.y = curr_frame.endQaut().y();
-        odometry_pose.pose.pose.orientation.z = curr_frame.endQaut().z();
+        odometry_pose.pose.pose.orientation.w = curr_frame.endQuat().w();
+        odometry_pose.pose.pose.orientation.x = curr_frame.endQuat().x();
+        odometry_pose.pose.pose.orientation.y = curr_frame.endQuat().y();
+        odometry_pose.pose.pose.orientation.z = curr_frame.endQuat().z();
 
         odometry_pose.pose.pose.position.x = curr_frame.getEndTrans().x();
         odometry_pose.pose.pose.position.y = curr_frame.getEndTrans().y();

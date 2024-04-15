@@ -57,6 +57,7 @@ public:
                     return knots[i].pose * Sophus::SE3d::exp(delta_log);
                 }
             }
+            //ROS_ERROR("Return indentity!");
             return Sophus::SE3d(Sophus::Matrix3d::Identity(),Sophus::Vector3d(0,0,0));
     }
 
@@ -64,6 +65,13 @@ public:
         return knots.back().pose;
     }
 
+    //
+    void pop_back(){
+
+        knots.pop_back();
+        max_timestamp = knots.back().timestamp;
+        knots_size--;
+    }
     Sophus::SE3d predict(double timestamp){
         if(timestamp < max_timestamp){
             ROS_ERROR("Preict error! timestamp: %f is in trajectory's range. max_timestamp: %f",timestamp, max_timestamp);
@@ -80,8 +88,13 @@ public:
 
     void addPose(Sophus::SE3d last_pose, double timestamp){
         if(timestamp < max_timestamp){
-            ROS_ERROR("Addpose error! timestamp: %f is in trajectory's range. max_time: %f",timestamp, max_timestamp);
+           // ROS_WARN("Addpose error! timestamp: %f is in trajectory's range. max_time: %f",timestamp, max_timestamp);
             knots.pop_back();
+            knots_size--;
+        }else if(timestamp == max_timestamp){
+           // ROS_WARN("update last pose");
+            knots.pop_back();
+            knots_size--;
         }
 
         max_timestamp = timestamp;
@@ -93,6 +106,7 @@ public:
         if(last_knot.timestamp < max_timestamp){
             ROS_ERROR("Addpose error! timestamp: %f is in trajectory's range. max_time: %f",last_knot.timestamp, max_timestamp);
             knots.pop_back();
+            knots_size--;
         }
         max_timestamp = last_knot.timestamp;
         ++knots_size;

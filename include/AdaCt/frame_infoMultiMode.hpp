@@ -260,7 +260,7 @@ public:
 
     }
 
-    void grid_sample_mid(double DownSampleSize){
+    void grid_sample_mid_in_pcl(double DownSampleSize){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
         //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;

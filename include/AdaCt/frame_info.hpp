@@ -264,7 +264,7 @@ public:
 
     }
 
-    void grid_sample_mid(double downsample_size){
+    void grid_sample_mid_in_pcl(double downsample_size){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
         //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
@@ -586,7 +586,7 @@ public:
         return pose.beginTrans();
     }
 
-    Eigen::Quaterniond endQaut(){
+    Eigen::Quaterniond endQuat(){
         return pose.endQuat();
     }
 

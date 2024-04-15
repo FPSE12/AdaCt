@@ -538,11 +538,11 @@ public:
 
                 Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
                 Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans();
-                Eigen::Quaterniond end_quat = curr_frame.endQaut();
+                Eigen::Quaterniond end_quat = curr_frame.endQuat();
                 Eigen::Vector3d end_trans = curr_frame.getEndTrans();
 
                 double *begin_quat_param = curr_frame.beginQuat().coeffs().data();
-                double *end_quat_param = curr_frame.endQaut().coeffs().data();
+                double *end_quat_param = curr_frame.endQuat().coeffs().data();
                 double *begin_trans_param = curr_frame.getBeginTrans().data();
                 double *end_trans_param = curr_frame.getEndTrans().data();
 
@@ -685,10 +685,10 @@ public:
         nav_msgs::Odometry odometry_pose;
         odometry_pose.header.stamp = ros::Time(headertime);
         odometry_pose.header.frame_id = odometry_frame;
-        odometry_pose.pose.pose.orientation.w = curr_frame.endQaut().w();
-        odometry_pose.pose.pose.orientation.x = curr_frame.endQaut().x();
-        odometry_pose.pose.pose.orientation.y = curr_frame.endQaut().y();
-        odometry_pose.pose.pose.orientation.z = curr_frame.endQaut().z();
+        odometry_pose.pose.pose.orientation.w = curr_frame.endQuat().w();
+        odometry_pose.pose.pose.orientation.x = curr_frame.endQuat().x();
+        odometry_pose.pose.pose.orientation.y = curr_frame.endQuat().y();
+        odometry_pose.pose.pose.orientation.z = curr_frame.endQuat().z();
 
         odometry_pose.pose.pose.position.x = curr_frame.getEndTrans().x();
         odometry_pose.pose.pose.position.y = curr_frame.getEndTrans().y();

@@ -36,7 +36,7 @@ public:
 
     }
 
-    SE3 linearInplote(double alpha){
+    inline SE3 linearInplote(double alpha){
         if(alpha<0.0 || alpha>1.0){
             ROS_ERROR("OptPose_h wrong! alpha is not in 0-1.alpha: %f",alpha);
             return begin_pose;
@@ -92,14 +92,33 @@ public:
     int compareDiff(const OptPose otherpose){
         Eigen::Quaterniond other_qua=otherpose.end_pose.unit_quaternion();
         Eigen::Quaterniond this_qua=this->end_pose.unit_quaternion();
-        double delta_thate = acos(this_qua.dot(other_qua)/(this_qua.norm() * other_qua.norm()));
+        Eigen::Quaterniond delta_qua = this_qua.conjugate() * other_qua;
+        Eigen::AngleAxisd  delta_axis = Eigen::AngleAxisd(delta_qua);
+        double delta_theta = delta_axis.angle();
 
         Eigen::Vector3d other_trans = otherpose.end_pose.translation();
         Eigen::Vector3d this_tran = this->endTrans();
         double delta_trans = (other_trans-this_tran).norm();
 
-        if(delta_thate < 0.05 && delta_trans < 0.01) return 0;
-        if(delta_thate > 10 || delta_trans > 0.3) return 2;//see ict-icp's motion threshold
+        if(delta_theta < 0.05 && delta_trans < 0.01) return 0;
+        if(delta_theta > 10*M_PI/180.0 || delta_trans > 0.3) return 2;//see ict-icp's motion threshold
+
+        return 1;
+    }
+
+    int compareDiff(const OptPose otherpose, double theta_thres, double trans_thres){
+        Eigen::Quaterniond other_qua=otherpose.end_pose.unit_quaternion();
+        Eigen::Quaterniond this_qua=this->end_pose.unit_quaternion();
+        Eigen::Quaterniond delta_qua = this_qua.conjugate() * other_qua;
+        Eigen::AngleAxisd  delta_axis = Eigen::AngleAxisd(delta_qua);
+        double delta_theta = delta_axis.angle();
+
+        Eigen::Vector3d other_trans = otherpose.end_pose.translation();
+        Eigen::Vector3d this_tran = this->endTrans();
+        double delta_trans = (other_trans-this_tran).norm();
+
+        if(delta_theta < 0.05 && delta_trans < 0.01) return 0;
+        if(delta_theta > theta_thres * M_PI / 180.0 || delta_trans > trans_thres) return 2;//see ict-icp's motion threshold
 
         return 1;
     }

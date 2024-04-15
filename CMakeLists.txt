@@ -32,6 +32,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
         message_generation
         tf
+        livox_ros_driver
 )
 
 ## System dependencies are found with CMake's conventions
@@ -174,6 +175,18 @@ target_link_libraries(lidar_odometry_trajectory
         ${OpenCV_LIBRARIES}
         )
 
+add_executable(lidar_odometry_trajectoryForCommonType src/lidar_odometry_trajectoryForCommonType.cpp )
+target_link_libraries(lidar_odometry_trajectoryForCommonType
+        ${catkin_LIBRARIES}
+        ${PCL_LIBRARIES}
+        ${CERES_LIBRARIES}
+        ${Sophus_LIBRARIES}
+        tsl::robin_map
+        #OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
+        ${OpenCV_LIBRARIES}
+        )
+
 
 add_executable(lidar_odometry_voxelmap_segment src/lidar_odometry_voxelmap_segment.cpp )
 target_link_libraries(lidar_odometry_voxelmap_segment
@@ -187,15 +200,26 @@ target_link_libraries(lidar_odometry_voxelmap_segment
         )
 
 
-add_executable(lidar_odometry_voxelmapMultiMode src/lidar_odometry_voxelmapMultiMode.cpp)
-target_link_libraries(lidar_odometry_voxelmapMultiMode
+#add_executable(lidar_odometry_voxelmapMultiMode src/lidar_odometry_voxelmapMultiMode.cpp)
+#target_link_libraries(lidar_odometry_voxelmapMultiMode
+#        ${catkin_LIBRARIES}
+#        ${PCL_LIBRARIES}
+#        ${CERES_LIBRARIES}
+#        ${Sophus_LIBRARIES}
+#        tsl::robin_map
+#        OpenMP::OpenMP_CXX
+#        )
+add_executable(lidar_odometry_multiResolutionTraj src/lidar_odometry_multiResolutionTraj.cpp)
+target_link_libraries(lidar_odometry_multiResolutionTraj
         ${catkin_LIBRARIES}
         ${PCL_LIBRARIES}
         ${CERES_LIBRARIES}
         ${Sophus_LIBRARIES}
         tsl::robin_map
-        OpenMP::OpenMP_CXX
+        ${OpenMP_CXX_FLAGS}
+        ${OpenCV_LIBRARIES}
         )
+
 
 add_executable(lidar_odometry_featureVoxelmap src/old/lidar_odometry_featureVoxelmap.cpp)
 target_link_libraries(lidar_odometry_featureVoxelmap

@@ -8,7 +8,6 @@ Panels:
         - /Status1
         - /Path1
         - /TF1/Frames1
-        - /targetPoint1
       Splitter Ratio: 0.5
     Tree Height: 1036
   - Class: rviz/Selection
@@ -29,7 +28,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: map
+    SyncSource: ""
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -142,10 +141,6 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        map:
-          Value: true
-        odometry:
-          Value: true
       Marker Alpha: 1
       Marker Scale: 2
       Name: TF
@@ -153,9 +148,7 @@ Visualization Manager:
       Show Axes: true
       Show Names: true
       Tree:
-        map:
-          odometry:
-            {}
+        {}
       Update Interval: 0
       Value: true
     - Alpha: 1

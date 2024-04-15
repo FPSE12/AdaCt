@@ -20,13 +20,16 @@
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
 
+
+#include "livox_ros_driver/CustomMsg.h"
+
 #include "types.hpp"
 
 using namespace std;
 
 
 
-enum lidar_type{RS, VLP, LIVOX};
+enum LidarType{RS, VLP, AVIA, LIVOX};
 
 // struct PointXYZIRT
 // {
@@ -63,6 +66,7 @@ public:
     double map_resolution;
     double local_map_size;
 
+    double blind;
     int N_SCAN;
     int Horizon_SCAN;
     int groundScanInd;
@@ -79,6 +83,7 @@ public:
     float surfThreshold = 0.1;
     float nearestFeatureSearchSqDist = 25;
 
+
     configParam(){
         nh.param<bool>("AdaCt/debug_print",debug_print,true);
         nh.param<int>("AdaCt/lidar_type",lidar_type,RS);
@@ -91,6 +96,7 @@ public:
         nh.param<int>("", Horizon_SCAN, 1800);
         nh.param<double>("",vertical_fov,41.3);
         nh.param<int>("",groundScanInd,20);//< 32
+        nh.param<double>("",blind,0.2);
         ang_res_x = (double )360/Horizon_SCAN;
         ang_res_y = (double )vertical_fov/(N_SCAN-1);
         segmentAlphaX = ang_res_x / 180.0 * M_PI;

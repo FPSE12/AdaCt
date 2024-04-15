@@ -1,6 +1,7 @@
 #include "AdaCt/utility.h"
-#include "AdaCt/frame_info_usecommonPointType.hpp"
-
+#include "AdaCt/frame_info_usecommonPointTypeOnly.hpp"
+#include "AdaCt/cloud_convert.hpp"
+#include "AdaCt/downSample.hpp"
 #include "AdaCt/trajectory.hpp"
 //#include <ikd-Tree/ikd_Tree.h>
 #include "AdaCt/costfunction.hpp"
@@ -16,7 +17,7 @@
 
 #define MAX_NEIGHBOR_NUM 20
 
-#define A2D_THRESHOLD 0.4 //UNSTRUCTE:low; , structure: >0.4
+#define A2D_THRESHOLD 0.25 //UNSTRUCTE:low; , structure: >0.4
 
 
 //
@@ -27,6 +28,7 @@ class Lidar_odo : public configParam
 {
 public:
     ros::Subscriber lidar_sub;
+    ros::Subscriber lidar_sub_livox;
 
     ros::Publisher map_pub;
     ros::Publisher odo_pub;
@@ -40,9 +42,13 @@ public:
 
     // cloud
     std::deque<sensor_msgs::PointCloud2> rosCloudQue;
+    std::deque<livox_ros_driver::CustomMsg> rosLivoxCloudQue;
 
-
-
+    //
+    pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori;
+    pcl::PointCloud<PointXYZIRT>::Ptr cloud_valid;
+    pcl::PointCloud<PointXYZIRT>::Ptr cloud_world;
+    pcl::PointCloud<PointXYZIRT>::Ptr cloud_deskew;
     //global map
     pcl::PointCloud<PointXYZIRT>::Ptr globalMap;
 
@@ -86,7 +92,6 @@ public:
     double cost_threshold;
     double cost_robust;
 
-    int motion_evaluate;
     double a2d_average;
 
 
@@ -94,6 +99,7 @@ public:
     {
         //ROS_INFO("1");
         lidar_sub = nh.subscribe<sensor_msgs::PointCloud2>(lidar_topic, 5, &Lidar_odo::lidarCallback, this, ros::TransportHints().tcpNoDelay());
+        //lidar_sub_livox = nh.subscribe<livox_ros_driver::CustomMsg>(lidar_topic, 5, &Lidar_odo::livoxLidarCallback, this, ros::TransportHints().tcpNoDelay());
         map_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/global_map",1);
         odo_pub = nh.advertise<nav_msgs::Odometry>("adact/odometry",1);
         traj_pub = nh.advertise<nav_msgs::Path>("adact/path",1);
@@ -104,7 +110,10 @@ public:
         cloud_downsample_pub = nh.advertise<sensor_msgs::PointCloud2>("adact/downsample",1);
 
 
-
+        cloud_valid.reset(new pcl::PointCloud<PointXYZIRT>());
+        cloud_world.reset(new pcl::PointCloud<PointXYZIRT>());
+        cloud_deskew.reset(new pcl::PointCloud<PointXYZIRT>());
+        cloud_ori.reset(new pcl::PointCloud<PointXYZIRT>());
         globalMap.reset(new pcl::PointCloud<PointXYZIRT>());
 
        // Segcloud.reset(new pcl::PointCloud<PointXYZIRT>());
@@ -127,13 +136,13 @@ public:
         frame_count =-1;
         iter_nums =MAX_ITER_COUNT;
 
-        motion_evaluate=0;
+
         last_pose.initialMotion();
         //mapping params
         max_voxel_size = 0.8;
         max_layer = 2;//0,1,2
         layer_size=vector<int>{10,5,5,5,5};
-        max_points_size = 1000;
+        max_points_size = 1000;//1000
         min_eigen_value = 0.01;
 
 
@@ -146,6 +155,40 @@ public:
         std::lock_guard<std::mutex> lock(mtx);
         rosCloudQue.push_back(*laserMsg);
         //preprocess();
+    }
+
+    void livoxLidarCallback(const livox_ros_driver::CustomMsgConstPtr &laserMsg){
+        std::lock_guard<std::mutex> lock(mtx);
+        rosLivoxCloudQue.emplace_back(*laserMsg);
+    }
+
+
+
+    void preprocess(pcl::PointCloud<PointXYZIRT>::Ptr pcl_cloud, std::vector<PointType> & point_vec,
+                    double  &header_time, double &timeStart, double &timeEnd){
+
+        for(auto & point_pcl: pcl_cloud->points){
+            if(!std::isfinite(point_pcl.x)|| !std::isfinite(point_pcl.y) || !std::isfinite(point_pcl.z) ){
+                continue;
+            }
+            double dis =point_pcl.x * point_pcl.x + point_pcl.y * point_pcl.y + point_pcl.z * point_pcl.z;
+            if(dis<blind * blind){
+                continue;
+            }
+
+            PointType p;
+            p.point<<point_pcl.x, point_pcl.y, point_pcl.z;
+            p.timestamp = point_pcl.timestamp;
+            p.intensity = point_pcl.intensity;
+            p.distance = dis;
+            point_vec.emplace_back(p);
+        }
+        //do not calculate the alpha!
+        sort(point_vec.begin(), point_vec.end(), timelistvec);
+        timeStart = point_vec[0].timestamp;
+        timeEnd = point_vec.back().timestamp;
+        //sub frame like ct-icp
+        subSampleFrame(point_vec,0.05);
     }
 
     //point2point
@@ -238,32 +281,25 @@ public:
 
     }
 
-    void getSegCloud(pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori,
+    void getSegCloud(std::vector<PointType>& cloud_ori,
+                     double timeStart, double timeEnd,
                      double timeSegBegin, double timeSegEnd,
-                     pcl::PointCloud<PointXYZIRT>::Ptr SegCloud){
-        SegCloud->clear();
-        double timeStart = cloud_ori->points[0].timestamp;
-        double timeEnd = cloud_ori->points.back().timestamp;
+                     std::vector<PointType>& SegCloud){
+        SegCloud.clear();
         if(timeSegBegin < timeStart || timeSegEnd > timeEnd || timeSegBegin < timeSegBegin){
             ROS_ERROR("cloud Seg false! timeSegBegin: %f, timeSegEnd: %f, timeStart: %f, timeEnd:%f ", timeSegBegin,
                       timeSegEnd,timeStart,timeEnd);
             ROS_BREAK();
         }
-//        for(auto iter = cloud_ori->begin(); iter!=cloud_ori->end();++iter){
-//            if(iter->timestamp >= timeSegBegin && iter->timestamp <= timeSegEnd){
-//                SegCloud->push_back(*iter);
-//                cloud_ori->erase(iter);
-//            }
-//        }
-        for(auto point : cloud_ori->points){
+        for(PointType &point : cloud_ori){
             if(point.timestamp>= timeSegBegin && point.timestamp <= timeSegEnd){
-                SegCloud->push_back(point);
+                SegCloud.emplace_back(point);
             }
         }
     }
 
     void Initframe(frame_info & curr_frame,
-                   pcl::PointCloud<PointXYZIRT>::Ptr cloud,
+                   std::vector<PointType> & points_vec,
                    Sophus::SE3d begin_pose, Sophus::SE3d end_pose,
                    double timeB, double timeE, double header_time,
                    int frame_id)
@@ -275,14 +311,11 @@ public:
         curr_frame.timeEnd = timeE;
         curr_frame.headertime = header_time;
         curr_frame.frame_id = frame_id;
-        curr_frame.setOricloud(cloud);
-
-
-
+        curr_frame.setPoints(points_vec);
 
         //下采样会导致问题
-//        curr_frame.grid_sample_mid_in_pcl(DOWNSAMPLE_VOXEL_SIZE);
-        curr_frame.Adaptive_sample_mid_in_pcl();
+//        curr_frame.grid_sample_mid_in_vec(DOWNSAMPLE_VOXEL_SIZE);
+        curr_frame.Adaptive_sample_mid_in_vec();
 
         //if seg the cloud scan2scan: use the last full cloud
 //        auto scan2scan_start = std::chrono::steady_clock::now();
@@ -296,7 +329,7 @@ public:
 //                 correct.translation().y(),correct.translation().z());
     }
 
-    void Solve(frame_info & curr_frame){
+    void Solve(frame_info & curr_frame, int & motion_evaluate){
         int iter_count = 0;
         auto iter_start = std::chrono::steady_clock::now();
         for (; iter_count < iter_nums; iter_count++) {
@@ -308,7 +341,7 @@ public:
 
             Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
             Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans();
-            Eigen::Quaterniond end_quat = curr_frame.endQaut();
+            Eigen::Quaterniond end_quat = curr_frame.endQuat();
             Eigen::Vector3d end_trans = curr_frame.getEndTrans();
 
             problem.AddParameterBlock(begin_quat.coeffs().data(),4, new ceres::EigenQuaternionManifold);
@@ -320,12 +353,12 @@ public:
             auto findNeighbor_start = std::chrono::steady_clock::now();
             double find_neighborcost=0;
 
-            pcl::PointCloud<PointXYZIRT>::Ptr cloud_valid(new pcl::PointCloud<PointXYZIRT>());
+
             auto time1 = std::chrono::steady_clock::now();
             //bool IsValid=local_map.NeighborSearch(curr_frame.cloud_world->points[i],raw_point,searchDis,neighbor,pabcd);
             vector<ptpl> ptpl_list;
             vector<Eigen::Vector3d > no_match_list;
-
+            cloud_valid->clear();
             for(auto & p: curr_frame.points){
                 p.point_world = curr_frame.pose.linearInplote(p.alpha) * p.point;
             }
@@ -343,11 +376,14 @@ public:
 
                 double alpha  = pl.point_alpha;
                 double weight = pl.A2D;
+                if(weight < A2D_THRESHOLD){
+                    continue;
+                }
 
 //                    if(pl.normal.dot(begin_trans - pl.point)<0){
 //                        pl.normal = -1.0 * pl.normal;
 //                    }
-                if(pl.normal.dot(pl.center - pl.point_world)<0){
+                if(pl.normal.dot(begin_trans - pl.point)<0){
                     pl.normal = -1.0 * pl.normal;
                 }
 //                    ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor4, 1, 4, 4, 3, 3>(
@@ -368,7 +404,7 @@ public:
 
 
 
-            publishCloud(cloud_valid_pub,cloud_valid,ros::Time(curr_frame.headertime),"odometry");//1ms
+            publishCloud(cloud_valid_pub,cloud_valid,curr_frame.headertime,"odometry");//1ms
 //
 //            publishCloud(cloud_downsample_pub,curr_frame.cloud_ori_downsample,ros::Time(curr_frame.headertime),"odometry");
             auto findNeighbor_end = std::chrono::steady_clock::now();
@@ -383,8 +419,6 @@ public:
 //                    ROS_INFO("problem make COST: %f ms",
 //                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
 //                    ROS_INFO("OPT_NUM:%d",opt_num);
-
-
             }
             //add other constraints
             problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
@@ -424,66 +458,94 @@ public:
             end_quat.normalize();
             curr_frame.setMotion(begin_quat, end_quat, begin_trans, end_trans);
 
-
         }
         auto iter_end = std::chrono::steady_clock::now();
 
-        auto map_start = std::chrono::steady_clock::now();
-//            curr_frame.updateWorldCloud();
-        motion_evaluate = curr_frame.pose.compareDiff(key_poses.back());
+        //judge keyframe
+        //last_pose = curr_frame.pose;
+        if(motion_evaluate == 2){
+           return;
+        }
+        motion_evaluate = curr_frame.pose.compareDiff(key_poses.back(),10,0.3);
+
+
+
+    }
+
+    void ProcessSeg( std::vector<PointType> & points_vec, double timeStart, double timeEnd,
+                    double  timeSegBegin, double timeSegEnd, double headertime,
+                    int frame_id, int & motion_evaluate,
+                    std::vector<PointType> & points_vec_process){
+
+        std::vector<PointType> SegPoints;
+        getSegCloud(points_vec,timeStart, timeEnd,
+                    timeSegBegin, timeSegEnd,SegPoints);
+        //ROS_INFO("segpoints.size():%d",SegPoints.size());
+        //Sophus::SE3d begin_pose = globalTraj.predict(timeSegBegin);
+        Sophus::SE3d begin_pose = globalTraj.getLastPose();
+        Sophus::SE3d end_pose = globalTraj.predict(timeSegEnd);
+        frame_info curr_frame;
+        //will clear Segpoints
+        Initframe(curr_frame, SegPoints, begin_pose,end_pose, timeSegBegin, timeSegEnd, headertime, frame_id);
+        Solve(curr_frame, motion_evaluate);
+
+        curr_frame.getWorldPoints(points_vec_process);
+
+        //globalTraj.pop_back();
+        globalTraj.addPose(curr_frame.pose.begin_pose,curr_frame.timeStart);
+        globalTraj.addPose(curr_frame.pose.end_pose,curr_frame.timeEnd);
         last_pose = curr_frame.pose;
 
-        if(motion_evaluate==2 ){
+
+    }
+
+    void updateworldPointFromGlobalTrajectory(std::vector<PointType> & points_vec){
+        for(auto &point_type : points_vec){
+            SE3 point_pose = globalTraj.getPose(point_type.timestamp);
+            point_type.point_world = point_pose * point_type.point;
+            point_type.point_deskew = globalTraj.getLastPose().inverse() * point_type.point_world;
+        }
+    }
+
+    void AddCloudToMap(int motion_evaluate_, std::vector<PointType> &points_vec_process, double & header_stamp){
+        auto map_start = std::chrono::steady_clock::now();
+//            curr_frame.updateWorldCloud();
+        //updateworldPointFromGlobalTrajectory(points_vec);
+        if( motion_evaluate_==2 ){
 //                curr_frame.updateFromDownSample();
 //                curr_frame.updateWorldCloud();
+            ROS_WARN("KEY FRAME!!");
             last_points.clear();
-            curr_frame.updateFromDownSample();
-            last_points = curr_frame.points;
-            updateVoxelMap(curr_frame.points, max_voxel_size, max_layer, layer_size,
+            last_points.resize(points_vec_process.size());
+            copy(points_vec_process.begin(),points_vec_process.end(),last_points.begin());
+
+            updateVoxelMap(points_vec_process, max_voxel_size, max_layer, layer_size,
                            max_points_size, max_points_size, min_eigen_value,
                            voxel_map);
 
-            key_poses.push_back(curr_frame.pose);
+            key_poses.push_back(last_pose);
             globalMap->clear();
             getVoxelMap(voxel_map, globalMap);
+
+            //pub map
+            publishCloud(map_pub,globalMap,header_stamp,"map");
 
         }
         auto map_end = std::chrono::steady_clock::now();
         map_cost = std::chrono::duration<double,std::milli>(map_end-map_start).count();
         ROS_INFO("MAP UPDATE: %f ms", map_cost);
-
     }
 
-    void ProcessSeg( pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori,
-                    double  timeSegBegin, double timeSegEnd, double headertime, int frame_id){
-
-        pcl::PointCloud<PointXYZIRT>::Ptr Segcloud(new pcl::PointCloud<PointXYZIRT>());
-        getSegCloud(cloud_ori, timeSegBegin, timeSegEnd,Segcloud);
-
-        //Sophus::SE3d begin_pose = globalTraj.predict(timeSegBegin);
-        Sophus::SE3d begin_pose = globalTraj.getLastPose();
-        Sophus::SE3d end_pose = globalTraj.predict(timeSegEnd);
-        frame_info curr_frame;
-        Initframe(curr_frame, Segcloud, begin_pose,end_pose, timeSegBegin, timeSegEnd, headertime, frame_id);
-
-        Solve(curr_frame);
-
-        //globalTraj.addPose(curr_frame.pose.begin_pose,curr_frame.timeStart);
-        globalTraj.addPose(curr_frame.pose.end_pose,curr_frame.timeEnd);
-
-        publish(curr_frame);
 
 
-    }
-
-    void preprocess()
+    void Process()
     {
         ros::Rate r(100);//100Hz
 
         while (ros::ok())
         {
 
-            if (rosCloudQue.empty())
+            if (rosCloudQue.empty() && rosLivoxCloudQue.empty())
             {
                 continue;
                 // return;
@@ -494,47 +556,51 @@ public:
             frame_count++;
             ROS_INFO("------------------------------frame_id:%d----------------------------",frame_count);
 
-            // get pcl cloud
-            motion_evaluate =0;
-            mtx_get.lock();
-            sensor_msgs::PointCloud2 cloud_ori_ros = std::move(rosCloudQue.front());
-            rosCloudQue.pop_front();
-            mtx_get.unlock();
-            pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori(new pcl::PointCloud<PointXYZIRT>());
+            //pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori(new pcl::PointCloud<PointXYZIRT>());
+            cloud_ori->clear();
+            std::vector<PointType> points_vec;
+            std::vector<PointType> points_vec_process;
 
 
+            // get timestamp
+            double headertime = 0.0;
             double timeStart = 0.0;
             double timeEnd = 0.0;
-            pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
-            // get timestamp
-            double headertime = cloud_ori_ros.header.stamp.toSec();
-            sort(cloud_ori->points.begin(),cloud_ori->points.end(), timelist);
-            timeStart = cloud_ori->points[0].timestamp;
-            timeEnd = cloud_ori->points.back().timestamp;
+
+            //get cloud
+            mtx_get.lock();
+            if((LidarType)lidar_type == AVIA){
+                //ROS_INFO("1");
+                livox_ros_driver::CustomMsg cloud_ori_ros = std::move(rosLivoxCloudQue.front());
+                rosLivoxCloudQue.pop_front();
+                CLOUD_CONVERT cc(cloud_ori_ros,points_vec,headertime,timeStart, timeEnd);
+            }else{
+                sensor_msgs::PointCloud2 cloud_ori_ros = std::move(rosCloudQue.front());
+                rosCloudQue.pop_front();
+                CLOUD_CONVERT cc(cloud_ori_ros,(LidarType)lidar_type, points_vec,headertime,timeStart,timeEnd);
+            }
+            mtx_get.unlock();
+//            pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
+//            preprocess(cloud_ori, points_vec,headertime,timeStart, timeEnd);
+
+
 
             if (first_flag )
             {
                 // do some initial work
                 //ROS_INFO("1");
                 frame_info curr_frame;
-                curr_frame.setOricloud(cloud_ori);
                 curr_frame.setFrameTime(headertime,timeStart, timeEnd,frame_count);
                 curr_frame.pose.initialMotion();
 
-                std::vector<PointType> pv_list;
-                for(auto &point : cloud_ori->points){
-                    PointType p;
-                    //delete the nan point
-                    if(!std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
-                        continue;
-                    }
-                    p.point<< point.x, point.y, point.z;
-                    p.point_world<<point.x,point.y,point.z;
-                    pv_list.push_back(p);
+                for(auto &point : points_vec){
+                    point.point_world = point.point;
+                    point.point_deskew = point.point;
                 }
+
                 //build map
-                ROS_INFO("BUILD_MAP, Point_size:%d",pv_list.size());
-                buildVoxelMap(pv_list, max_voxel_size, max_layer, layer_size,
+                ROS_INFO("BUILD_MAP, Point_size:%d",points_vec.size());
+                buildVoxelMap(points_vec, max_voxel_size, max_layer, layer_size,
                               max_points_size, max_points_size, min_eigen_value,
                               voxel_map);
 
@@ -550,17 +616,26 @@ public:
 
                 *globalMap += *cloud_ori;
 
-                publish(curr_frame);
+                publish(points_vec, headertime);
+                std::vector<PointType>().swap(points_vec);
+                //publishCloud(map_pub,globalMap,headertime,"map");
                 //ROS_INFO("3");
                 continue;
                 //return;
             }
 
+            int motion_evaluate =0;
+
             double timeMid = (timeStart  + timeEnd)/(2.0);
             ROS_INFO("frame time: %f, %f, %f", timeStart, timeMid, timeEnd);
             // init frame_info
-            ProcessSeg(cloud_ori, timeStart, timeMid, headertime,frame_count);
-            ProcessSeg(cloud_ori, timeMid, timeEnd, headertime, frame_count);
+            ProcessSeg(points_vec,timeStart, timeEnd, timeStart, timeMid, headertime,frame_count, motion_evaluate, points_vec_process);
+            ProcessSeg(points_vec,timeStart, timeEnd, timeMid, timeEnd, headertime, frame_count, motion_evaluate, points_vec_process);
+
+            AddCloudToMap(motion_evaluate, points_vec_process, headertime);
+
+            //publish ori_cloud, world_cloud
+            publish(points_vec_process,headertime);
 
 //            double timeMid_1 = (timeStart * 2.0 + timeEnd)/(3.0);
 //            double timeMid_2 = (timeStart + 2.0 * timeEnd)/(3.0);
@@ -569,6 +644,11 @@ public:
 //            ProcessSeg(cloud_ori, timeStart, timeMid_1, headertime);
 //            ProcessSeg(cloud_ori, timeMid_1, timeMid_2, headertime);
 //            ProcessSeg(cloud_ori, timeMid_2, timeEnd, headertime);
+
+            std::vector<PointType>().swap(points_vec);
+            std::vector<PointType>().swap(points_vec_process);
+
+
             auto all_end = std::chrono::steady_clock::now();
             all_cost = std::chrono::duration<double, std::milli>(all_end-all_start).count();
 
@@ -587,70 +667,89 @@ public:
     }
 
 
-    void publishCloud(ros::Publisher &pub, pcl::PointCloud<PointXYZIRT>::ConstPtr pcl_cloud, ros::Time header_stamp ,string frame){
+    void publishCloud(ros::Publisher &pub, pcl::PointCloud<PointXYZIRT>::ConstPtr pcl_cloud, double &header_stamp ,string frame){
+        ros::Time ros_headertime = ros::Time(header_stamp);
         sensor_msgs::PointCloud2 ros_cloud;
         pcl::toROSMsg(*pcl_cloud, ros_cloud);
-        ros_cloud.header.stamp = header_stamp;
+        ros_cloud.header.stamp = ros_headertime;
         ros_cloud.header.frame_id = frame;
         pub.publish(ros_cloud);
         return ;
     }
 
-    void publish(frame_info & curr_frame){
+    void transVec2Pcl(std::vector<PointType> &points_vec){
+        cloud_world->clear();
+        cloud_deskew->clear();
+        cloud_ori->clear();
+        for(auto & point_type : points_vec){
+            Eigen::Vector3d world_point = point_type.point_world;
+            Eigen::Vector3d deskew_point = point_type.point_deskew;
+            Eigen::Vector3d point = point_type.point;
+            PointXYZIRT p;
+            p.x = point[0];
+            p.y = point[1];
+            p.z = point[2];
+            p.intensity = point_type.intensity;
+            cloud_ori->points.emplace_back(p);
+            p.x = world_point[0];
+            p.y = world_point[1];
+            p.z = world_point[2];
+            cloud_world->points.emplace_back(p);
+            p.x = deskew_point[0];
+            p.y = deskew_point[1];
+            p.z = deskew_point[2];
+            cloud_deskew->points.emplace_back(p);
+        }
+    }
+
+    void publish(std::vector<PointType> & points_vec, double headertime) {
+        transVec2Pcl(points_vec);
         nav_msgs::Odometry odometry_pose;
-        odometry_pose.header.stamp = ros::Time(curr_frame.headertime);
+        odometry_pose.header.stamp = ros::Time(headertime);
         odometry_pose.header.frame_id = odometry_frame;
-        odometry_pose.pose.pose.orientation.w = curr_frame.endQaut().w();
-        odometry_pose.pose.pose.orientation.x = curr_frame.endQaut().x();
-        odometry_pose.pose.pose.orientation.y = curr_frame.endQaut().y();
-        odometry_pose.pose.pose.orientation.z = curr_frame.endQaut().z();
+        odometry_pose.pose.pose.orientation.w = last_pose.endQuat().w();
+        odometry_pose.pose.pose.orientation.x = last_pose.endQuat().x();
+        odometry_pose.pose.pose.orientation.y = last_pose.endQuat().y();
+        odometry_pose.pose.pose.orientation.z = last_pose.endQuat().z();
 
-        odometry_pose.pose.pose.position.x = curr_frame.getEndTrans().x();
-        odometry_pose.pose.pose.position.y = curr_frame.getEndTrans().y();
-        odometry_pose.pose.pose.position.z = curr_frame.getEndTrans().z();
+        odometry_pose.pose.pose.position.x = last_pose.endTrans().x();
+        odometry_pose.pose.pose.position.y = last_pose.endTrans().y();
+        odometry_pose.pose.pose.position.z = last_pose.endTrans().z();
 
-
-        sensor_msgs::PointCloud2 globalMapRos;
-        pcl::toROSMsg(*globalMap, globalMapRos);
-        globalMapRos.header.stamp = ros::Time(curr_frame.headertime);
-        globalMapRos.header.frame_id = "map";
 
         geometry_msgs::PoseStamped geo_odometry_pose;
         geo_odometry_pose.header = odometry_pose.header;
         geo_odometry_pose.pose = odometry_pose.pose.pose;
 
-        globalPath.header.stamp = ros::Time(curr_frame.headertime);
+        globalPath.header.stamp = ros::Time(headertime);
         globalPath.header.frame_id = "map";
-        globalPath.poses.push_back(geo_odometry_pose);
+        globalPath.poses.emplace_back(geo_odometry_pose);
 
         sensor_msgs::PointCloud2 deskew_cloud;
-        pcl::toROSMsg(*curr_frame.cloud_deskew,deskew_cloud);
-        deskew_cloud.header.stamp = ros::Time(curr_frame.headertime);
+        pcl::toROSMsg(*cloud_deskew,deskew_cloud);
+        deskew_cloud.header.stamp = ros::Time(headertime);
         deskew_cloud.header.frame_id= "odometry";
 
         sensor_msgs::PointCloud2 world_cloud;
-        pcl::toROSMsg(*curr_frame.cloud_world,world_cloud);
-        world_cloud.header.stamp = ros::Time(curr_frame.headertime);
+        pcl::toROSMsg(*cloud_world,world_cloud);
+        world_cloud.header.stamp = ros::Time(headertime);
         world_cloud.header.frame_id="map";
 
 
         sensor_msgs::PointCloud2 ori_cloud;
-        pcl::toROSMsg(*curr_frame.cloud_ori,ori_cloud);
-        ori_cloud.header.stamp = ros::Time(curr_frame.headertime);
+        pcl::toROSMsg(*cloud_ori,ori_cloud);
+        ori_cloud.header.stamp = ros::Time(headertime);
         ori_cloud.header.frame_id= "odometry";
-
+        traj_pub.publish(globalPath);
+        odo_pub.publish(odometry_pose);
         cloud_ori_pub.publish(ori_cloud);
         cloud_pub.publish(deskew_cloud);
         cloud_world_pub.publish(world_cloud);
 
-        traj_pub.publish(globalPath);
-
-        //odo quick warning!
-        //odo_pub.publish(odometry_pose);
 
 
 
-        map_pub.publish(globalMapRos);
+
 
 
     }
@@ -670,7 +769,7 @@ int main(int argc, char **argv)
     Lidar_odo lp;
 //
 //    // // 由于process是循环，如果直接运行，不会进入下面的spin，就不会进入点云回调函数，所以要新开一个线程
-    std::thread process(&Lidar_odo::preprocess, &lp);
+    std::thread process(&Lidar_odo::Process, &lp);
 //
     //process.join();
 //    // // spin才会进入回调函数

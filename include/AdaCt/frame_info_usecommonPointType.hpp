@@ -104,6 +104,29 @@ public:
         frame_id=frame_id_;
     }
 
+    void subSampleFrame(std::vector<PointType> & frame, double voxel_size){
+        tsl::robin_map<Voxel, PointType> grid_map;
+
+        for(auto point : frame){
+            Voxel voxel;
+            voxel.x = static_cast<short>(point.point[0] / voxel_size);
+            if(voxel.x<0) voxel.x--;
+            voxel.y = static_cast<short>(point.point[1] / voxel_size);
+            if(voxel.y<0) voxel.y--;
+            voxel.z = static_cast<short>(point.point[2] / voxel_size);
+            if(voxel.z<0) voxel.z--;
+            if(grid_map.find(voxel)!=grid_map.end()){
+                grid_map[voxel] = point;
+            }
+
+        }
+        frame.clear();
+        for(const auto & [_, point] : grid_map){
+            frame.push_back(point);
+        }
+
+    }
+
     void setOricloud(pcl::PointCloud<PointXYZIRT>::ConstPtr ori_cloud){
         pcl::copyPointCloud(*ori_cloud, *cloud_ori);
         //ROS_INFO("%f", cloud_ori->points[1].timestamp);
@@ -112,6 +135,30 @@ public:
         points.clear();
         all_points.clear();
         timeVec.resize(cloud_ori->size());
+        //add to all points
+        for(auto point : cloud_ori->points){
+            if(!std::isfinite(point.x)|| !std::isfinite(point.y) || !std::isfinite(point.z)){
+                continue;
+            }
+            double dis = std::sqrt( point.x * point.x + point.y * point.y + point.z * point.z);
+            if(dis<blind){
+                continue;
+            }
+
+            PointType p;
+            p.point<<point.x, point.y, point.z;
+            p.timestamp = point.timestamp;
+            p.alpha = (p.timestamp - timeStart)/(timeEnd - timeStart);
+            p.intensity = point.intensity;
+            all_points.push_back(p);
+        }
+
+        //subsample for add to map
+        std::mt19937_64 g;
+        std::shuffle(all_points.begin(),all_points.end(),g);
+        //std::shuffle(cloud_ori->points.begin(),cloud_ori->points.end(),g);
+        subSampleFrame(all_points, 0.05);
+
 
 
     }
@@ -250,8 +297,20 @@ public:
                  );
     }
 
+    void gird_sample_mid_in_vector(double downsample_size){
+        points.clear();
+        std::vector<PointType> frame_sub;
+//        frame_sub.resize(frame.size());
+        for(auto point : all_points){
+            frame_sub.push_back(point);
+        }
+        subSampleFrame(frame_sub, downsample_size);
+        for(auto point : frame_sub){
+            points.push_back(point);
+        }
+    }
 
-    void  grid_sample_mid(double downsample_size){
+    void  grid_sample_mid_in_pcl(double downsample_size){
         cloud_ori_downsample->clear();
         points.clear();
         all_points.clear();
@@ -304,7 +363,7 @@ public:
     }
 
 
-    void Adaptive_sample_mid(){
+    void Adaptive_sample_mid_in_pcl(){
         std::vector<tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>>> indices_map(distance_voxel_size.size());
         points.clear();
         cloud_ori_downsample->clear();
@@ -466,7 +525,7 @@ public:
         return pose.beginTrans();
     }
 
-    Eigen::Quaterniond endQaut(){
+    Eigen::Quaterniond endQuat(){
         return pose.endQuat();
     }
 

@@ -237,7 +237,7 @@ public:
     }
 
 
-    void grid_sample_mid(double downsample_size){
+    void grid_sample_mid_in_pcl(double downsample_size){
         tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
         //grid.reserve(size_t(cloud_ori->size()));
         Voxel voxel;
@@ -270,7 +270,7 @@ public:
     }
 
 
-    void Adaptive_sample_mid(){
+    void Adaptive_sample_mid_in_pcl(){
         std::vector<tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>>> indices_map(distance_voxel_size.size());
 
         for(auto point : cloud_ori->points){
@@ -291,9 +291,11 @@ public:
 
                 Voxel voxel;
                 voxel.x = static_cast<short>(point.x / voxel_size);
+                if(voxel.x<0) voxel.x--;
                 voxel.y = static_cast<short>(point.y / voxel_size);
+                if(voxel.y<0) voxel.y--;
                 voxel.z = static_cast<short>(point.z / voxel_size);
-
+                if(voxel.z<0) voxel.z--;
                 indices_map[index_][voxel].addPoint(point);
             }
 
@@ -426,7 +428,7 @@ public:
         return pose.beginTrans();
     }
 
-    Eigen::Quaterniond endQaut(){
+    Eigen::Quaterniond endQuat(){
         return pose.endQuat();
     }
 

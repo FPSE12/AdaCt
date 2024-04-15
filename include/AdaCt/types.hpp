@@ -48,18 +48,24 @@ POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIRT,
 typedef struct CommonPointType{
     Eigen::Vector3d point;
     Eigen::Vector3d point_world;
+    Eigen::Vector3d point_deskew;
     uint16_t ring;
     double timestamp;
     float intensity;
     //others property
     Eigen::Matrix3d cov;
     double alpha;
+    double distance;
 
 } PointType;
 
 //plane
 typedef struct Plane {
+    //calculate :  maybe not precise
     Eigen::Vector3d center;
+
+    //last points
+    Eigen::Vector3d plane_point;
     Eigen::Vector3d normal;
     Eigen::Vector3d y_normal;
     Eigen::Vector3d x_normal;
@@ -87,6 +93,7 @@ typedef struct ptpl {
     Eigen::Vector3d point_world;
     Eigen::Vector3d normal;
     Eigen::Vector3d center;
+    Eigen::Vector3d plane_point;
     Eigen::Matrix<double, 6, 6> plane_cov;
     double d;
     double point_alpha;

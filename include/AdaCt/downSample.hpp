@@ -3,6 +3,34 @@
 #include "utility.h"
 #include "voxelmap/voxelmap.hpp"
 
+
+void subSampleFrame(std::vector<PointType> & frame, double voxel_size){
+    tsl::robin_map<Voxel, std::vector<PointType>> grid_map;
+    //std::mt19937_64 g;
+    //std::shuffle(frame.begin(),frame.end(),g);
+    for(auto point : frame){
+        Voxel voxel;
+        voxel.x = static_cast<short>(point.point[0] / voxel_size);
+        if(voxel.x<0) voxel.x--;
+        voxel.y = static_cast<short>(point.point[1] / voxel_size);
+        if(voxel.y<0) voxel.y--;
+        voxel.z = static_cast<short>(point.point[2] / voxel_size);
+        if(voxel.z<0) voxel.z--;
+
+            grid_map[voxel].emplace_back(point);
+
+
+    }
+    frame.clear();
+    //ROS_INFO("map_size:%d",grid_map.size());
+    for( auto & [_, point] : grid_map){
+        frame.emplace_back(point[0]);
+    }
+    //std::shuffle(frame.begin(),frame.end(),g);
+
+}
+
+
 void subSampleFrame(pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori, pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori_downsample, int voxelSize){
     tsl::robin_map<Voxel, VoxelBlock<PointXYZIRT>> grid;
     grid.reserve(size_t(cloud_ori->size()));
@@ -18,8 +46,8 @@ void subSampleFrame(pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori, pcl::PointCloud
         grid[voxel].addPoint(cloud_ori->points[i]);
     }
     cloud_ori_downsample->clear();
-    cloud_ori_downsample->reserve(grid.size());
-    for(const auto &[_,points] : grid){
-        cloud_ori_downsample->points.push_back(points[0]);
+    //cloud_ori_downsample->reserve(grid.size());
+    for(const auto &[_,voxelblock] : grid){
+        cloud_ori_downsample->points.emplace_back(voxelblock.points[0]);
     }
 }

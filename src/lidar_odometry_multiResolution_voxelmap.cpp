@@ -125,7 +125,7 @@ public:
         last_pose.initialMotion();
         //mapping params
         max_voxel_size = 0.8;
-        max_layer = 2;//0,1,2
+        max_layer = 1;//0,1,2
         layer_size=vector<int>{10,5,5,5,5};
         max_points_size = 1000;
         min_eigen_value = 0.01;
@@ -160,7 +160,7 @@ public:
             if(voxel.z<0) voxel.z--;
             grid[voxel].push_back(s_point);
         }
-        for(int iter =0; iter<5;iter++){
+        for(int iter =0; iter<MAX_ITER_COUNT_SCAN;iter++){
             ceres::Problem problem;
             ceres::LossFunction *loss_function = new ceres::CauchyLoss(0.1);
             Eigen::Quaterniond  begin_quat_ = curr_pose_.beginQuat();
@@ -235,6 +235,7 @@ public:
     {
         curr_frame.Reset();
         curr_frame.setOricloud(cloud_ori);
+        curr_frame.setFrameTime(headertime,timeStart,timeEnd,frame_count);
         if(frame_count<1){
             curr_frame.pose.initialMotion();
             //key_poses.push_back(curr_frame.pose);
@@ -245,11 +246,11 @@ public:
         }
 
 
-        curr_frame.getTimeStamp(headertime, timeStart, timeEnd);
+        //curr_frame.getTimeStamp(headertime, timeStart, timeEnd);
 
         //下采样会导致问题
-//        curr_frame.grid_sample_mid(DOWNSAMPLE_VOXEL_SIZE);
-        curr_frame.Adaptive_sample_mid();
+//        curr_frame.grid_sample_mid_in_pcl(DOWNSAMPLE_VOXEL_SIZE);
+        curr_frame.Adaptive_sample_mid_in_pcl();
 
         auto scan2scan_start = std::chrono::steady_clock::now();
         Sophus::SE3d pre_end = curr_frame.pose.end_pose;
@@ -289,12 +290,17 @@ public:
 
 
             cloud_ori->clear();
+            timeStart=0.0;
+            timeEnd =0.0 ;
             pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
 //           ---------------------------------------------------init------------------------------------
             auto initframe_start = std::chrono::steady_clock::now();
 
             // get timestamp
             headertime = cloud_ori_ros.header.stamp.toSec();
+            sort(cloud_ori->points.begin(),cloud_ori->points.end(), timelist);
+            timeStart = cloud_ori->points[0].timestamp;
+            timeEnd = cloud_ori->points.back().timestamp;
 
             if (first_flag )
             {
@@ -357,7 +363,7 @@ public:
 
                 Eigen::Quaterniond  begin_quat = curr_frame.beginQuat();
                 Eigen::Vector3d  begin_trans = curr_frame.getBeginTrans();
-                Eigen::Quaterniond end_quat = curr_frame.endQaut();
+                Eigen::Quaterniond end_quat = curr_frame.endQuat();
                 Eigen::Vector3d end_trans = curr_frame.getEndTrans();
 
                 problem.AddParameterBlock(begin_quat.coeffs().data(),4, new ceres::EigenQuaternionManifold);
@@ -498,7 +504,7 @@ public:
             motion_evaluate = curr_frame.pose.compareDiff(key_poses.back());
             last_pose = curr_frame.pose;
 
-
+            //
             if(motion_evaluate==2 ){
 //                curr_frame.updateFromDownSample();
 //                curr_frame.updateWorldCloud();
@@ -559,10 +565,10 @@ public:
         nav_msgs::Odometry odometry_pose;
         odometry_pose.header.stamp = ros::Time(headertime);
         odometry_pose.header.frame_id = odometry_frame;
-        odometry_pose.pose.pose.orientation.w = curr_frame.endQaut().w();
-        odometry_pose.pose.pose.orientation.x = curr_frame.endQaut().x();
-        odometry_pose.pose.pose.orientation.y = curr_frame.endQaut().y();
-        odometry_pose.pose.pose.orientation.z = curr_frame.endQaut().z();
+        odometry_pose.pose.pose.orientation.w = curr_frame.endQuat().w();
+        odometry_pose.pose.pose.orientation.x = curr_frame.endQuat().x();
+        odometry_pose.pose.pose.orientation.y = curr_frame.endQuat().y();
+        odometry_pose.pose.pose.orientation.z = curr_frame.endQuat().z();
 
         odometry_pose.pose.pose.position.x = curr_frame.getEndTrans().x();
         odometry_pose.pose.pose.position.y = curr_frame.getEndTrans().y();
@@ -598,13 +604,14 @@ public:
         ori_cloud.header.stamp = ros::Time(headertime);
         ori_cloud.header.frame_id= "odometry";
 
+        odo_pub.publish(odometry_pose);
         cloud_ori_pub.publish(ori_cloud);
         cloud_pub.publish(deskew_cloud);
         cloud_world_pub.publish(world_cloud);
 
         traj_pub.publish(globalPath);
 
-        odo_pub.publish(odometry_pose);
+
 
 
 
