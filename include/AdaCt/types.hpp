@@ -19,7 +19,6 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/impl/statistical_outlier_removal.hpp>
 
-
 struct PointVelodyne{
     PCL_ADD_POINT4D;                // pcl宏定义，加入点的坐标
     PCL_ADD_INTENSITY;              // pcl宏定义，加入强度
@@ -98,6 +97,7 @@ typedef struct ptpl {
     double d;
     double point_alpha;
     double A2D;
+    double residual;
     int layer;
 } ptpl;
 

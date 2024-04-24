@@ -6,7 +6,7 @@
 #include "voxelmap/voxelmap_OctoTree.hpp"
 #include <opencv/cv.h>
 
-#define DOWNSAMPLE_VOXEL_SIZE 0.4
+#define DOWNSAMPLE_VOXEL_SIZE 0.2
 #define DOWNSAMPLE_EDGE_VOXEL_SIZE 0.2
 #define DOWNSAMPLE_PLANE_VOXEL_SIZE 0.4
 
@@ -44,14 +44,15 @@ public:
     vector<Eigen::Vector3d> last_line;
     vector<pair<double,double>> timestamp_line;
 
-    std::vector<std::pair<double,double>> distance_voxel_size = {
-            {0.2,  0.1},
-            {2.0,  0.2},
-            {4.,   0.4},
-            {8.,   0.8},
-            {16.,  1.6},
-            {200., -1.}
-    };
+
+
+//    std::vector<std::pair<double,double>> distance_voxel_size = {
+//            {0.2,  0.2},
+//            {5.,  0.4},
+//            {15.,  0.8},
+//            {100., 1.6},
+//            {200., -1}
+//    };
 
 public:
 
@@ -123,23 +124,169 @@ public:
         points.swap(frame_sub);
     }
 
+    void Adaptive_sample_mid_in_vec_NARROW(int average_dis){
+        //average_dis = 4;
+        std::vector<std::pair<double,double>> distance_voxel_size = {
+                {0.2,  0.1},
+                {average_dis*1.5, 0.2},
+                {200, -1.}
+        };
 
 
-    void Adaptive_sample_mid_in_vec(){
         std::vector<tsl::robin_map<Voxel, std::vector<PointType>>> indices_map(distance_voxel_size.size());
         points.clear();
 
         for(auto &point : all_points){//do not use the & ,may bechange in point
 //            double dis = std::sqrt(point.point[0] * point.point[0] + point.point[1] * point.point[1] +
 //                    point.point[2] * point.point[2]);
-            double dis = sqrt(point.distance);
+            double dis = point.distance;
 //            ROS_INFO("DIS: %f",dis);
             if(dis >= distance_voxel_size.front().first && dis < distance_voxel_size.back().first) {
 
                 auto lw = std::lower_bound(distance_voxel_size.begin(), distance_voxel_size.end(), dis,
                                            [](const std::pair<double, double> &rhs, double lhs) {
                                                return rhs.first < lhs;
-                                           });
+                                           });//first bigger
+
+                auto index_ = std::distance(distance_voxel_size.begin(), lw) - 1;
+                double voxel_size = distance_voxel_size[index_].second;
+
+                Voxel voxel;
+                voxel.x = static_cast<short>(point.point[0] / voxel_size);
+                if(voxel.x<0) voxel.x--;
+                voxel.y = static_cast<short>(point.point[1] / voxel_size);
+                if(voxel.y<0) voxel.y--;
+                voxel.z = static_cast<short>(point.point[2] / voxel_size);
+                if(voxel.z<0) voxel.z--;
+
+                indices_map[index_][voxel].emplace_back(point);
+            }
+
+        }
+        for(const auto &grid_map : indices_map) {
+            for(const auto & [_, points_vec] : grid_map){
+                PointType midP;
+
+                double min_dis = std::numeric_limits<double>::max();
+                for(auto & point : points_vec){
+                    midP.point += point.point;
+                }
+                midP.point /=(double) points_vec.size();
+
+                PointType targetPoint;
+                for(auto &point : points_vec){
+                    double dis = (midP.point[0]-point.point[0])*(midP.point[0]-point.point[0])+
+                                 (midP.point[1]-point.point[1])*(midP.point[1]-point.point[1])+
+                                 (midP.point[2]-point.point[2])*(midP.point[2]-point.point[2]);
+                    if(dis < min_dis){
+                        min_dis = dis;
+                        targetPoint = point;
+                    }
+                }
+
+                points.emplace_back(targetPoint);
+            }
+
+        }
+
+
+    }
+
+    void Adaptive_sample_mid_in_vec_INDOOR(int average_dis){
+        //average_dis = 4;
+        std::vector<std::pair<double,double>> distance_voxel_size = {
+                {0.2,  0.1},
+                {2.0,  0.2},
+                {average_dis*1.5, 0.4},
+                {200, -1.}
+        };
+
+
+        std::vector<tsl::robin_map<Voxel, std::vector<PointType>>> indices_map(distance_voxel_size.size());
+        points.clear();
+
+        for(auto &point : all_points){//do not use the & ,may bechange in point
+//            double dis = std::sqrt(point.point[0] * point.point[0] + point.point[1] * point.point[1] +
+//                    point.point[2] * point.point[2]);
+            double dis = point.distance;
+//            ROS_INFO("DIS: %f",dis);
+            if(dis >= distance_voxel_size.front().first && dis < distance_voxel_size.back().first) {
+
+                auto lw = std::lower_bound(distance_voxel_size.begin(), distance_voxel_size.end(), dis,
+                                           [](const std::pair<double, double> &rhs, double lhs) {
+                                               return rhs.first < lhs;
+                                           });//first bigger
+
+                auto index_ = std::distance(distance_voxel_size.begin(), lw) - 1;
+                double voxel_size = distance_voxel_size[index_].second;
+
+                Voxel voxel;
+                voxel.x = static_cast<short>(point.point[0] / voxel_size);
+                if(voxel.x<0) voxel.x--;
+                voxel.y = static_cast<short>(point.point[1] / voxel_size);
+                if(voxel.y<0) voxel.y--;
+                voxel.z = static_cast<short>(point.point[2] / voxel_size);
+                if(voxel.z<0) voxel.z--;
+
+                indices_map[index_][voxel].emplace_back(point);
+            }
+
+        }
+        for(const auto &grid_map : indices_map) {
+            for(const auto & [_, points_vec] : grid_map){
+                PointType midP;
+
+                double min_dis = std::numeric_limits<double>::max();
+                for(auto & point : points_vec){
+                    midP.point += point.point;
+                }
+                midP.point /=(double) points_vec.size();
+
+                PointType targetPoint;
+                for(auto &point : points_vec){
+                    double dis = (midP.point[0]-point.point[0])*(midP.point[0]-point.point[0])+
+                                 (midP.point[1]-point.point[1])*(midP.point[1]-point.point[1])+
+                                 (midP.point[2]-point.point[2])*(midP.point[2]-point.point[2]);
+                    if(dis < min_dis){
+                        min_dis = dis;
+                        targetPoint = point;
+                    }
+                }
+
+                points.emplace_back(targetPoint);
+            }
+
+        }
+
+
+    }
+
+    void Adaptive_sample_mid_in_vec(int average_dis){
+        //average_dis = 4;
+        std::vector<std::pair<double,double>> distance_voxel_size = {
+                {0.2,  0.1},
+                {2.0,  0.2},
+                {average_dis/2,   0.4},
+                {average_dis,   0.8},
+                {2*average_dis,  1.6},
+                {min(200,2*average_dis), -1.}
+        };
+
+
+        std::vector<tsl::robin_map<Voxel, std::vector<PointType>>> indices_map(distance_voxel_size.size());
+        points.clear();
+
+        for(auto &point : all_points){//do not use the & ,may bechange in point
+//            double dis = std::sqrt(point.point[0] * point.point[0] + point.point[1] * point.point[1] +
+//                    point.point[2] * point.point[2]);
+            double dis = point.distance;
+//            ROS_INFO("DIS: %f",dis);
+            if(dis >= distance_voxel_size.front().first && dis < distance_voxel_size.back().first) {
+
+                auto lw = std::lower_bound(distance_voxel_size.begin(), distance_voxel_size.end(), dis,
+                                           [](const std::pair<double, double> &rhs, double lhs) {
+                                               return rhs.first < lhs;
+                                           });//first bigger
 
                 auto index_ = std::distance(distance_voxel_size.begin(), lw) - 1;
                 double voxel_size = distance_voxel_size[index_].second;
@@ -171,6 +318,76 @@ public:
                     double dis = (midP.point[0]-point.point[0])*(midP.point[0]-point.point[0])+
                             (midP.point[1]-point.point[1])*(midP.point[1]-point.point[1])+
                             (midP.point[2]-point.point[2])*(midP.point[2]-point.point[2]);
+                    if(dis < min_dis){
+                        min_dis = dis;
+                        targetPoint = point;
+                    }
+                }
+
+                points.emplace_back(targetPoint);
+            }
+
+        }
+
+
+    }
+
+    void Adaptive_sample_mid_in_vec_OPEN(int average_dis){
+        //average_dis = 4;
+        std::vector<std::pair<double,double>> distance_voxel_size = {
+                {0.2,  0.2},
+                {2.0,  0.8},
+                {average_dis/2,   0.4},
+                {1.5*average_dis,  1.6},
+                {min(200,2*average_dis), -1.}
+        };
+
+
+        std::vector<tsl::robin_map<Voxel, std::vector<PointType>>> indices_map(distance_voxel_size.size());
+        points.clear();
+
+        for(auto &point : all_points){//do not use the & ,may bechange in point
+//            double dis = std::sqrt(point.point[0] * point.point[0] + point.point[1] * point.point[1] +
+//                    point.point[2] * point.point[2]);
+            double dis = point.distance;
+//            ROS_INFO("DIS: %f",dis);
+            if(dis >= distance_voxel_size.front().first && dis < distance_voxel_size.back().first) {
+
+                auto lw = std::lower_bound(distance_voxel_size.begin(), distance_voxel_size.end(), dis,
+                                           [](const std::pair<double, double> &rhs, double lhs) {
+                                               return rhs.first < lhs;
+                                           });//first bigger
+
+                auto index_ = std::distance(distance_voxel_size.begin(), lw) - 1;
+                double voxel_size = distance_voxel_size[index_].second;
+
+                Voxel voxel;
+                voxel.x = static_cast<short>(point.point[0] / voxel_size);
+                if(voxel.x<0) voxel.x--;
+                voxel.y = static_cast<short>(point.point[1] / voxel_size);
+                if(voxel.y<0) voxel.y--;
+                voxel.z = static_cast<short>(point.point[2] / voxel_size);
+                if(voxel.z<0) voxel.z--;
+
+                indices_map[index_][voxel].emplace_back(point);
+            }
+
+        }
+        for(const auto &grid_map : indices_map) {
+            for(const auto & [_, points_vec] : grid_map){
+                PointType midP;
+
+                double min_dis = std::numeric_limits<double>::max();
+                for(auto & point : points_vec){
+                    midP.point += point.point;
+                }
+                midP.point /=(double) points_vec.size();
+
+                PointType targetPoint;
+                for(auto &point : points_vec){
+                    double dis = (midP.point[0]-point.point[0])*(midP.point[0]-point.point[0])+
+                                 (midP.point[1]-point.point[1])*(midP.point[1]-point.point[1])+
+                                 (midP.point[2]-point.point[2])*(midP.point[2]-point.point[2]);
                     if(dis < min_dis){
                         min_dis = dis;
                         targetPoint = point;

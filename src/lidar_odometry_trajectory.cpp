@@ -588,6 +588,15 @@ public:
                 pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
             }
 
+//            static Eigen::Vector3d last_eigen;
+//            auto test_start = std::chrono::steady_clock::now();
+//            Eigen::Vector4d pcaCenter;
+//            pcl::compute3DCentroid(*cloud_ori, pcaCenter);
+//            Eigen::Matrix3d covariance;
+//            pcl::computeCovarianceMatrixNormalized(*cloud_ori, pcaCenter, covariance);
+//            Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigen_solver_(covariance,Eigen::ComputeEigenvectors);
+//            auto test_end = std::chrono::steady_clock::now();
+//            ROS_INFO("PCA:COST :%f", std::chrono::duration<double, std::milli>(test_end - test_start).count());
 //           ---------------------------------------------------init------------------------------------
 
 

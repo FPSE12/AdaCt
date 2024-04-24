@@ -8,7 +8,7 @@ void subSampleFrame(std::vector<PointType> & frame, double voxel_size){
     tsl::robin_map<Voxel, std::vector<PointType>> grid_map;
     //std::mt19937_64 g;
     //std::shuffle(frame.begin(),frame.end(),g);
-    for(auto point : frame){
+    for(auto &point : frame){
         Voxel voxel;
         voxel.x = static_cast<short>(point.point[0] / voxel_size);
         if(voxel.x<0) voxel.x--;
@@ -17,7 +17,7 @@ void subSampleFrame(std::vector<PointType> & frame, double voxel_size){
         voxel.z = static_cast<short>(point.point[2] / voxel_size);
         if(voxel.z<0) voxel.z--;
 
-            grid_map[voxel].emplace_back(point);
+        grid_map[voxel].emplace_back(point);
 
 
     }

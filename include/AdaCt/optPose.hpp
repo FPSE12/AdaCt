@@ -89,7 +89,7 @@ public:
 
     }
 
-    int compareDiff(const OptPose otherpose){
+    inline int compareDiff(const OptPose otherpose){
         Eigen::Quaterniond other_qua=otherpose.end_pose.unit_quaternion();
         Eigen::Quaterniond this_qua=this->end_pose.unit_quaternion();
         Eigen::Quaterniond delta_qua = this_qua.conjugate() * other_qua;

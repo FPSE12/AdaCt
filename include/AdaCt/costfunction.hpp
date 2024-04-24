@@ -5,8 +5,96 @@
 #include <ceres/loss_function.h>
 #include <ceres/local_parameterization.h>
 #include <Eigen/Dense>
+#include <Eigen/Core>
 
 #define PI 3.1415926
+
+
+class math_calcuate{
+public:
+
+    template <typename Derived>
+    static Eigen::Quaternion<typename Derived::Scalar> deltaQ(const Eigen::MatrixBase<Derived> &theta)
+    {
+        typedef typename Derived::Scalar Scalar_t;
+
+        Eigen::Quaternion<Scalar_t> dq;
+        Eigen::Matrix<Scalar_t, 3, 1> half_theta = theta;
+        half_theta /= static_cast<Scalar_t>(2.0);
+        dq.w() = static_cast<Scalar_t>(1.0);
+        dq.x() = half_theta.x();
+        dq.y() = half_theta.y();
+        dq.z() = half_theta.z();
+        dq.normalize();
+        return dq;
+    }
+
+
+    template <typename Derived>
+    static Eigen::Matrix<typename Derived::Scalar, 3, 3> skewSymmetric(const Eigen::MatrixBase<Derived> &mat)
+    {
+        Eigen::Matrix<typename Derived::Scalar, 3, 3> mat_skew;
+        mat_skew << typename Derived::Scalar(0), -mat(2), mat(1),
+                mat(2), typename Derived::Scalar(0), -mat(0),
+                -mat(1), mat(0), typename Derived::Scalar(0);
+        return mat_skew;
+    }
+
+
+    template <typename Derived>
+    static Eigen::Quaternion<typename Derived::Scalar> positify(const Eigen::QuaternionBase<Derived> &q)
+    {
+        return q;
+    }
+
+    template <typename Derived>
+    static Eigen::Matrix<typename Derived::Scalar, 4, 4> Qleft(const Eigen::QuaternionBase<Derived> &q)
+    {
+        Eigen::Quaternion<typename Derived::Scalar> qq = positify(q);
+        Eigen::Matrix<typename Derived::Scalar, 4, 4> ans;
+        ans(0, 0) = qq.w(), ans.template block<1, 3>(0, 1) = -qq.vec().transpose();
+        ans.template block<3, 1>(1, 0) = qq.vec(), ans.template block<3, 3>(1, 1) = qq.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() + skewSymmetric(qq.vec());
+        return ans;
+    }
+
+    template <typename Derived>
+    static Eigen::Matrix<typename Derived::Scalar, 4, 4> Qright(const Eigen::QuaternionBase<Derived> &p)
+    {
+        Eigen::Quaternion<typename Derived::Scalar> pp = positify(p);
+        Eigen::Matrix<typename Derived::Scalar, 4, 4> ans;
+        ans(0, 0) = pp.w(), ans.template block<1, 3>(0, 1) = -pp.vec().transpose();
+        ans.template block<3, 1>(1, 0) = pp.vec(), ans.template block<3, 3>(1, 1) = pp.w() * Eigen::Matrix<typename Derived::Scalar, 3, 3>::Identity() - skewSymmetric(pp.vec());
+        return ans;
+    }
+};
+
+
+//-----------parameterization-----------------------
+class RotationParameterization : public ceres::LocalParameterization
+{
+    virtual bool Plus(const double *x, const double *delta, double *x_plus_delta) const{
+        Eigen::Map<const Eigen::Quaterniond> _q(x);
+
+        Eigen::Quaterniond dq = math_calcuate::deltaQ(Eigen::Map<const Eigen::Vector3d>(delta));
+
+        Eigen::Map<Eigen::Quaterniond> q(x_plus_delta);
+
+        q = (_q * dq).normalized();
+
+        return true;
+    }
+    virtual bool ComputeJacobian(const double *x, double *jacobian) const{
+        Eigen::Map<Eigen::Matrix<double, 4, 3, Eigen::RowMajor>> j(jacobian);
+        j.topRows<3>().setIdentity();
+        j.bottomRows<1>().setZero();
+
+        return true;
+    }
+    virtual int GlobalSize() const { return 4; };
+    virtual int LocalSize() const { return 3; };
+};
+
+
 
 struct point2planeFunction
 {
@@ -309,6 +397,82 @@ struct CTFunctor2{
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };
 
+
+class CTFunctor2_mannual:public ceres::SizedCostFunction<1,4,4,3,3>{
+public:
+    CTFunctor2_mannual(double alpha,const Eigen::Vector3d &raw_point,const Eigen::Vector3d &ref_points, double weight, Eigen::Vector3d normal)
+            :alpha_(alpha),raw_points_(raw_point),ref_points_(ref_points),weight_(weight),normal_(normal){}
+
+    virtual  bool Evaluate(double const * const * parameters, double *residuals , double ** jacobians) const{
+        const Eigen::Vector3d tran_begin(parameters[2][0], parameters[2][1], parameters[2][2]);
+        const Eigen::Vector3d tran_end(parameters[3][0], parameters[3][1], parameters[3][2]);
+        const Eigen::Quaterniond rot_begin(parameters[0][3], parameters[0][0], parameters[0][1], parameters[0][2]);
+        const Eigen::Quaterniond rot_end(parameters[1][3], parameters[1][0], parameters[1][1], parameters[1][2]);
+
+        Eigen::Quaterniond rot_slerp = rot_begin.slerp(alpha_, rot_end);
+        rot_slerp.normalize();
+        Eigen::Vector3d tran_slerp = tran_begin * (1 - alpha_) + tran_end * alpha_;
+        Eigen::Vector3d point_world = rot_slerp * raw_points_ + tran_slerp;
+
+        double distance = normal_.dot(point_world - ref_points_);
+
+        residuals[0] =  weight_ * distance;
+
+        if(jacobians){
+            Eigen::Matrix<double, 1, 3> jacobian_rot_slerp = -normal_.transpose() * rot_slerp.toRotationMatrix() * math_calcuate::skewSymmetric(raw_points_) * weight_;
+
+            Eigen::Quaterniond rot_delta = rot_begin.inverse() * rot_end;
+            Eigen::Quaterniond rot_identity(Eigen::Matrix3d::Identity());
+            Eigen::Quaterniond rot_delta_slerp = rot_identity.slerp(alpha_, rot_delta);
+
+            if(jacobians[0]){//rot_begin
+                Eigen::Map<Eigen::Matrix<double, 1, 4, Eigen::RowMajor>> jacobian_rot_begin(jacobians[0]);
+                jacobian_rot_begin.setZero();
+
+                Eigen::Matrix<double, 3, 3> jacobian_slerp_begin = (rot_delta_slerp.toRotationMatrix()).transpose() * (Eigen::Matrix3d::Identity() - alpha_ * math_calcuate::Qleft(rot_delta_slerp).bottomRightCorner<3, 3>() * (math_calcuate::Qleft(rot_delta).bottomRightCorner<3, 3>()).inverse());
+
+                jacobian_rot_begin.block<1, 3>(0, 0) = jacobian_rot_slerp * jacobian_slerp_begin;
+
+            }
+
+            if(jacobians[1]){//rot_end
+                Eigen::Map<Eigen::Matrix<double, 1, 4, Eigen::RowMajor>> jacobian_rot_end(jacobians[1]);
+                jacobian_rot_end.setZero();
+
+                Eigen::Matrix<double, 3, 3> jacobian_slerp_end = alpha_ * math_calcuate::Qright(rot_delta_slerp).bottomRightCorner<3, 3>() * (math_calcuate::Qright(rot_delta).bottomRightCorner<3, 3>()).inverse();
+                jacobian_rot_end.block<1, 3>(0, 0) = jacobian_rot_slerp * jacobian_slerp_end;
+
+            }
+
+            if(jacobians[2]){//trans_begin
+                Eigen::Map<Eigen::Matrix<double, 1, 3, Eigen::RowMajor>> jacobian_tran_begin(jacobians[2]);
+                jacobian_tran_begin.setZero();
+
+                jacobian_tran_begin.block<1, 3>(0, 0) = normal_.transpose() * weight_ * (1 - alpha_);
+            }
+
+            if(jacobians[3]){//trans_end
+                Eigen::Map<Eigen::Matrix<double, 1, 3, Eigen::RowMajor>> jacobian_tran_end(jacobians[3]);
+                jacobian_tran_end.setZero();
+
+                jacobian_tran_end.block<1, 3>(0, 0) = normal_.transpose() * weight_ * alpha_;
+
+            }
+        }
+
+        return true;
+    }
+
+    void check(double **parameters);
+    double alpha_;
+    Eigen::Vector3d raw_points_;
+    Eigen::Vector3d ref_points_;
+    Eigen::Vector3d  normal_;
+    double weight_;
+    //FunctorT func;
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+};
 
 //-----------------------THree test------------------------
 struct CTFunctor3{

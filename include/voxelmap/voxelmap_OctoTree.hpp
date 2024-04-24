@@ -16,6 +16,7 @@
 #define Debug_print false
 #endif
 
+//#define MP_EN 1
 //copy from hku_mars->voxelmap:
 
 #define MIN_DIS_THRESHOLD 0.05
@@ -594,7 +595,7 @@ void getVoxelMap(const tsl::robin_map<Voxel, OctoTree*> & feat_map , pcl::PointC
 void build_single_residual(const PointType &pv, const OctoTree *current_octo,
                            const int current_layer, const int max_layer,
                            const double sigma_num, bool &is_sucess,
-                           double &distance, ptpl &single_ptpl) {
+                           const double &distance, ptpl &single_ptpl) {
     double radius_k = 3;
     Eigen::Vector3d p_w = pv.point_world;
     if (current_octo->plane_ptr_->is_plane) {//如果是个平面
@@ -635,12 +636,14 @@ void build_single_residual(const PointType &pv, const OctoTree *current_octo,
 //                    single_ptpl.layer = current_layer;
 //                    single_ptpl.point_alpha = pv.alpha;
 //                    single_ptpl.A2D = plane.A2D;
+//                    single_ptpl.plane_point = plane.plane_point;
 //                }
-//                return;
-//            } else {
-//                // is_sucess = false;
+//
+//            }else{
+//                is_sucess = false;
 //                return;
 //            }
+
 
 
             is_sucess = true;
@@ -655,6 +658,7 @@ void build_single_residual(const PointType &pv, const OctoTree *current_octo,
                 single_ptpl.point_alpha = pv.alpha;
                 single_ptpl.A2D = plane.A2D;
                 single_ptpl.plane_point = plane.plane_point;
+                single_ptpl.residual = dis_to_plane;
             }
             return;
         }else{
@@ -691,6 +695,7 @@ void BuildResidualListOMP(const tsl::robin_map<Voxel, OctoTree *> &voxel_map,
                           const int max_layer,
                           const std::vector<PointType> &pv_list,
                           std::vector<ptpl> &ptpl_list,
+                          const double dis_thres,
                           std::vector<Eigen::Vector3d> &non_match) {
     std::mutex mylock;
     ptpl_list.clear();
@@ -702,7 +707,7 @@ void BuildResidualListOMP(const tsl::robin_map<Voxel, OctoTree *> &voxel_map,
         useful_ptpl[i] = false;
     }
 #ifdef MP_EN
-    omp_set_num_threads(MP_PROC_NUM);
+    omp_set_num_threads(4);
 #pragma omp parallel for
 #endif
     for (int i = 0; i < index.size(); i++) {
@@ -721,9 +726,9 @@ void BuildResidualListOMP(const tsl::robin_map<Voxel, OctoTree *> &voxel_map,
             OctoTree *current_octo = iter->second;
             ptpl single_ptpl;
             bool is_sucess = false;
-            double prob = 1000.0;//残差的不确定性（以残差的协方差（一维）为方差的高斯分布中的概率）
+            //double prob = 0.0;//残差的不确定性（以残差的协方差（一维）为方差的高斯分布中的概率）
             build_single_residual(pv, current_octo, 0, max_layer, sigma_num,
-                                  is_sucess, prob, single_ptpl);
+                                  is_sucess, dis_thres, single_ptpl);
             if (!is_sucess) {//如果没有找到
                 Voxel near_position = position;
                 if (loc_xyz[0] >
@@ -750,7 +755,7 @@ void BuildResidualListOMP(const tsl::robin_map<Voxel, OctoTree *> &voxel_map,
                 auto iter_near = voxel_map.find(near_position);//找最近的再次寻找
                 if (iter_near != voxel_map.end()) {
                     build_single_residual(pv, iter_near->second, 0, max_layer, sigma_num,
-                                          is_sucess, prob, single_ptpl);
+                                          is_sucess, dis_thres, single_ptpl);
                 }
             }
             if (is_sucess) {//成功匹配

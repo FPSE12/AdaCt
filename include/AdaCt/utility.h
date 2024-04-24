@@ -29,7 +29,8 @@ using namespace std;
 
 
 
-enum LidarType{RS, VLP, AVIA, LIVOX};
+enum LidarType{RS, VLP, AVIA, LIVOX, HESAI};
+enum ENVTYPE{NARROW=1, INDOOR, OUTDOOR, OPEN};
 
 // struct PointXYZIRT
 // {
@@ -83,11 +84,16 @@ public:
     float surfThreshold = 0.1;
     float nearestFeatureSearchSqDist = 25;
 
+    ENVTYPE envtype;
+    bool keyframe_valid;
+    bool seg_frame;
 
     configParam(){
         nh.param<bool>("AdaCt/debug_print",debug_print,true);
-        nh.param<int>("AdaCt/lidar_type",lidar_type,RS);
-        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/rslidar_points");
+//        nh.param<int>("AdaCt/lidar_type",lidar_type,RS);
+//        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/rslidar_points");
+        nh.param<int>("AdaCt/lidar_type",lidar_type,HESAI);
+        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/hesai/pandar");
         nh.param<int>("AdaCt/initframeNum", initframe_num,20);
         nh.param<double>("AdaCT/map_resolution",map_resolution,0.5);
         nh.param<double>("AdaCt/local_map_size",local_map_size,1000);
@@ -102,6 +108,7 @@ public:
         segmentAlphaX = ang_res_x / 180.0 * M_PI;
         //segmentAlphaY = ang_res_y / 180.0 * M_PI;
         segmentAlphaY = 41.33/180*M_PI;
+        keyframe_valid = false;
 
     }
 };

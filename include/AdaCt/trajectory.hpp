@@ -86,7 +86,7 @@ public:
 
     }
 
-    void addPose(Sophus::SE3d last_pose, double timestamp){
+    inline void addPose(Sophus::SE3d last_pose, double timestamp){
         if(timestamp < max_timestamp){
            // ROS_WARN("Addpose error! timestamp: %f is in trajectory's range. max_time: %f",timestamp, max_timestamp);
             knots.pop_back();
@@ -102,7 +102,7 @@ public:
         knots.emplace_back(KNOT(last_pose,timestamp));
     }
 
-    void addPose(KNOT last_knot){
+    inline void addPose(KNOT last_knot){
         if(last_knot.timestamp < max_timestamp){
             ROS_ERROR("Addpose error! timestamp: %f is in trajectory's range. max_time: %f",last_knot.timestamp, max_timestamp);
             knots.pop_back();
