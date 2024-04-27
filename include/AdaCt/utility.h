@@ -25,12 +25,16 @@
 
 #include "types.hpp"
 
+
+#define INDOOR_THRESHOLD 20.0
 using namespace std;
 
 
 
-enum LidarType{RS, VLP, AVIA, LIVOX, HESAI};
+enum LidarType{RS, VLP, AVIA, LIVOX, HESAI, OUST64};
 enum ENVTYPE{NARROW=1, INDOOR, OUTDOOR, OPEN};
+enum ENVFEATURE{STATIC, DYNAMIC};
+enum MOTION_GRADE{SMOOTH=1, TURN, AGGRESSIVE, EXTREME};
 
 // struct PointXYZIRT
 // {
@@ -67,7 +71,10 @@ public:
     double map_resolution;
     double local_map_size;
 
+    int max_iter_nums;
+
     double blind;
+    double max_range;
     int N_SCAN;
     int Horizon_SCAN;
     int groundScanInd;
@@ -85,6 +92,9 @@ public:
     float nearestFeatureSearchSqDist = 25;
 
     ENVTYPE envtype;
+    ENVTYPE lastenv;
+    ENVFEATURE envfeature;
+    MOTION_GRADE ego_motion_grade;
     bool keyframe_valid;
     bool seg_frame;
 
@@ -92,17 +102,24 @@ public:
         nh.param<bool>("AdaCt/debug_print",debug_print,true);
 //        nh.param<int>("AdaCt/lidar_type",lidar_type,RS);
 //        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/rslidar_points");
-        nh.param<int>("AdaCt/lidar_type",lidar_type,HESAI);
-        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/hesai/pandar");
+        nh.param<int>("AdaCt/lidar_type",lidar_type,OUST64);
+        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/os_cloud_node/points");
+//        nh.param<int>("AdaCt/lidar_type",lidar_type,HESAI);
+//        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/hesai/pandar");
+//        nh.param<int>("AdaCt/lidar_type",lidar_type,VLP);
+//        nh.param<std::string>("AdaCt/lidar_topic",lidar_topic,"/velodyne_points");
+        nh.param<std::string>("", store_fold,"/home/wjj/SLAM_WS/lslam_ws/AdaCt_ws/src/AdaCt/store_fold/");
         nh.param<int>("AdaCt/initframeNum", initframe_num,20);
         nh.param<double>("AdaCT/map_resolution",map_resolution,0.5);
         nh.param<double>("AdaCt/local_map_size",local_map_size,1000);
         nh.param<std::string>("AdaCt/odometry_frame",odometry_frame,"odometry");
+        nh.param<int>("",max_iter_nums,5);
         nh.param<int>("",N_SCAN,32);
         nh.param<int>("", Horizon_SCAN, 1800);
         nh.param<double>("",vertical_fov,41.3);
         nh.param<int>("",groundScanInd,20);//< 32
         nh.param<double>("",blind,0.2);
+        nh.param<double>("",max_range,120);
         ang_res_x = (double )360/Horizon_SCAN;
         ang_res_y = (double )vertical_fov/(N_SCAN-1);
         segmentAlphaX = ang_res_x / 180.0 * M_PI;

@@ -19,6 +19,8 @@
 #include <pcl/filters/statistical_outlier_removal.h>
 #include <pcl/filters/impl/statistical_outlier_removal.hpp>
 
+
+//-------------FOR VELODYNE---------------------
 struct PointVelodyne{
     PCL_ADD_POINT4D;                // pcl宏定义，加入点的坐标
     PCL_ADD_INTENSITY;              // pcl宏定义，加入强度
@@ -29,6 +31,26 @@ struct PointVelodyne{
 
 POINT_CLOUD_REGISTER_POINT_STRUCT(PointVelodyne,
                                   (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint16_t, ring, ring)(float, time, time))
+
+
+//--------------for oust---------------------
+struct PointOust64{
+    PCL_ADD_POINT4D;                // pcl宏定义，加入点的坐标
+    PCL_ADD_INTENSITY;              // pcl宏定义，加入强度
+    uint32_t t;
+    uint16_t reflectivity;
+    uint8_t ring;
+    uint16_t ambient;
+    uint32_t range;
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+}EIGEN_ALIGN16;
+
+POINT_CLOUD_REGISTER_POINT_STRUCT(PointOust64,
+                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint32_t , t, t)(std::uint16_t, reflectivity, reflectivity)
+                                  (std::uint8_t, ring, ring)
+                                  (std::uint16_t, ambient, ambient)
+                                  (std::uint32_t, range, range))
+
 
 //---------------------pointType-----------------------------------------
 struct PointXYZIRT

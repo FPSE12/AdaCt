@@ -74,7 +74,7 @@ public:
     }
     Sophus::SE3d predict(double timestamp){
         if(timestamp < max_timestamp){
-            ROS_ERROR("Preict error! timestamp: %f is in trajectory's range. max_timestamp: %f",timestamp, max_timestamp);
+            //ROS_ERROR("Preict error! timestamp: %f is in trajectory's range. max_timestamp: %f",timestamp, max_timestamp);
             return getPose(timestamp);
         }
         KNOT pre_knot = knots.back();

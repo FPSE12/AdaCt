@@ -128,7 +128,8 @@ public:
         //average_dis = 4;
         std::vector<std::pair<double,double>> distance_voxel_size = {
                 {0.2,  0.1},
-                {average_dis*1.5, 0.2},
+                {2.0,  0.2},
+                {average_dis*1.5, 0.4},
                 {200, -1.}
         };
 
@@ -197,7 +198,8 @@ public:
         std::vector<std::pair<double,double>> distance_voxel_size = {
                 {0.2,  0.1},
                 {2.0,  0.2},
-                {average_dis*1.5, 0.4},
+                {average_dis, 0.4},
+                {average_dis*2, 0.8},
                 {200, -1.}
         };
 
@@ -264,12 +266,12 @@ public:
     void Adaptive_sample_mid_in_vec(int average_dis){
         //average_dis = 4;
         std::vector<std::pair<double,double>> distance_voxel_size = {
-                {0.2,  0.1},
-                {2.0,  0.2},
-                {average_dis/2,   0.4},
-                {average_dis,   0.8},
-                {2*average_dis,  1.6},
-                {min(200,2*average_dis), -1.}
+                 {0.2,  0.1},
+                 {2.,   0.2},
+                 {4.,   0.4},
+                 {average_dis*1.5,   0.8},
+                 {20.,  1.6},
+                 {200., -1.}
         };
 
 
@@ -336,9 +338,9 @@ public:
         //average_dis = 4;
         std::vector<std::pair<double,double>> distance_voxel_size = {
                 {0.2,  0.2},
-                {2.0,  0.8},
-                {average_dis/2,   0.4},
-                {1.5*average_dis,  1.6},
+                {2.0,  1.6},
+                {average_dis*0.75,   0.6},
+                {1.25*average_dis,  1.6},
                 {min(200,2*average_dis), -1.}
         };
 

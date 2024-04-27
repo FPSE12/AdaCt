@@ -23,6 +23,7 @@
 
 #define keyframe_threshold_w 5
 #define keyframe_threshold_t 0.3
+
 //#define keyframe_valid true
 //
 
@@ -87,6 +88,7 @@ public:
 
     //PCA analyse
     Eigen::Vector3f PCALastMainDir;
+    Eigen::Vector3f PCALastEigenValue;
 
     //env judge
     double average_dis = 0;
@@ -321,35 +323,99 @@ public:
         //ROS_INFO("REG_THRES: %f", reg_thres);
     }
 
+    void ENVAnalyse(vector<PointType> & points_vec){
+        auto evaluate = std::chrono::steady_clock::now();
+        int sample =0;
+        average_dis = 0;
+        int count=0;
+        for(auto & point :points_vec){
+            average_dis += point.distance;
+            sample++;
+        }
+        auto  evaluatea_end = std::chrono::steady_clock::now();
+        average_dis = average_dis/sample;
+        ROS_INFO("DISTANCE: %f", average_dis);//<5 0.2  <10 0.4 >10 ada
+
+        if(average_dis<5.0){
+            envtype = ENVTYPE::NARROW;
+            keyframe_valid = true;
+            seg_frame = false;
+            ROS_WARN("NARROW");
+        }else if(average_dis < 8.0){
+            envtype = ENVTYPE::INDOOR;
+            keyframe_valid = false;
+            seg_frame = false;
+        } else if(average_dis <15.0){
+            envtype = ENVTYPE::OUTDOOR;
+            keyframe_valid = false;
+            seg_frame = true;
+        } else{
+            envtype = ENVTYPE::OPEN;
+            keyframe_valid = false;
+            seg_frame = true;
+        }
+    }
+
     int PCAAnalyse(){
         int seg_num=1;
         Eigen::Vector3f PCACurrMainDir;
         Eigen::Vector4f pcaCenter;
+        Eigen::Vector3f PCACurrEigenValue;
         pcl::compute3DCentroid(*cloud_ori, pcaCenter);
         Eigen::Matrix3f covariance;
         pcl::computeCovarianceMatrixNormalized(*cloud_ori, pcaCenter, covariance);
         Eigen::SelfAdjointEigenSolver<Eigen::Matrix3f> eigen_solver_(covariance,Eigen::ComputeEigenvectors);
         Eigen::Matrix3f eigenVectorPCA = eigen_solver_.eigenvectors();
         PCACurrMainDir = eigenVectorPCA.col(2);
-
+        PCACurrEigenValue = eigen_solver_.eigenvalues();
         if(!first_flag){
+            //angle change
+            double value = abs((PCACurrEigenValue[2] / PCALastEigenValue[2])-1.0);
             double angle = acos(PCACurrMainDir.dot(PCALastMainDir)/(PCACurrMainDir.norm()*PCALastMainDir.norm()));
             angle = angle/M_PI * 180;
             if(angle>90.0){
                 angle = 180.0-angle;
             }
-            ROS_INFO("angle %f",angle);
-            if(angle>=20.0){
-                seg_num=4;
+            ROS_INFO("angle %f && value: %f",angle,value);
+
+            if(value >= 0.15){
                 keyframe_valid = true;
-            }else if(angle >=10.0){
-                seg_num =3;
-                keyframe_valid = true;
-            }else if(angle>=2.0){
-                seg_num = 2;
+                envfeature = ENVFEATURE::DYNAMIC;
+                seg_frame = false;
+                ROS_WARN("DYNAMIC");
+            }else{
+                keyframe_valid = false;
+                envfeature = ENVFEATURE::STATIC;
+                if(angle>=20.0){
+//                    seg_num=4;
+//                    if(envtype <= ENVTYPE::INDOOR){
+//                        seg_num = 2;
+//                    }
+//                    ego_motion_grade = MOTION_GRADE::EXTREME;
+//                    ROS_WARN("MOTION ARRESIVE");
+//                }else if(angle >=20.0){
+
+                    //seg_frame =true;
+                    seg_num =3;
+                    if(envtype <= ENVTYPE::INDOOR){
+                        seg_num = 2;
+                    }
+                    ego_motion_grade = MOTION_GRADE::AGGRESSIVE;
+                }else if(angle>=2.0){
+                    ego_motion_grade = MOTION_GRADE::TURN;
+                    seg_num = 2;
+                }else{
+                    ego_motion_grade = MOTION_GRADE::SMOOTH;
+                    seg_num=1;
+                }
+
             }
+
+
+
         }
         PCALastMainDir = PCACurrMainDir;
+        PCALastEigenValue = PCACurrEigenValue;
         return seg_num;
     }
 
@@ -362,6 +428,8 @@ public:
         curr_frame.Reset();
         curr_frame.pose.begin_pose = begin_pose;
         curr_frame.pose.end_pose  = end_pose;
+
+
         curr_frame.timeStart = timeB;
         curr_frame.timeEnd = timeE;
         curr_frame.headertime = header_time;
@@ -370,12 +438,22 @@ public:
 
         //下采样会导致问题
 
-
+        max_iter_nums = 5;
         switch (envtype) {
             case ENVTYPE::NARROW:
-                curr_frame.Adaptive_sample_mid_in_vec_NARROW(average_dis);
+                if(ego_motion_grade >= MOTION_GRADE::AGGRESSIVE){
+                    curr_frame.grid_sample_mid_in_vec(0.1);
+                    //max_iter_nums = 10;
+                }else{
+                    //curr_frame.Adaptive_sample_mid_in_vec_NARROW(average_dis);
+                    curr_frame.grid_sample_mid_in_vec(0.2);
+                }
+
                 break;
             case ENVTYPE::INDOOR:
+
+                //curr_frame.grid_sample_mid_in_vec(0.2);
+
                 curr_frame.Adaptive_sample_mid_in_vec_INDOOR(average_dis);
                 break;
             case ENVTYPE::OUTDOOR:
@@ -389,6 +467,8 @@ public:
                 break;
 
         }
+
+//          curr_frame.grid_sample_mid_in_vec(0.1);
 //        curr_frame.Adaptive_sample_mid_in_vec();
 
         //if seg the cloud scan2scan: use the last full cloud
@@ -415,10 +495,16 @@ public:
         double find_neighborcost=0;
         double solve_cost = 0;
         auto iter_start = std::chrono::steady_clock::now();
-        for (; iter_count < MAX_ITER_COUNT; iter_count++) {
+        for (; iter_count < max_iter_nums; iter_count++) {
 
             // ceres opt
-            ceres::LossFunction *loss_function = new ceres::CauchyLoss(0.1);
+            ceres::LossFunction *loss_function;
+            if(ego_motion_grade == MOTION_GRADE::AGGRESSIVE || ego_motion_grade == MOTION_GRADE::EXTREME){
+                loss_function = new ceres::CauchyLoss(0.1 * ego_motion_grade);
+            }else{
+                loss_function = new ceres::CauchyLoss(0.1);
+            }
+            //ceres::LossFunction *loss_function = new ceres::CauchyLoss(0.1);
             //ceres::LossFunction * loss_function = new ceres::HuberLoss(0.1);
             ceres::Problem problem;
 
@@ -549,15 +635,15 @@ public:
         }
         auto iter_end = std::chrono::steady_clock::now();
 
-        if (Debug_print) {
-                    ROS_INFO("neighbor COST: %f ms",
-                             find_neighborcost);
-                    ROS_INFO("compute COST: %f ms",
-                             solve_cost);
-//                    ROS_INFO("problem make COST: %f ms",
-//                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
-//                    ROS_INFO("OPT_NUM:%d",opt_num);
-        }
+//        if (Debug_print) {
+//                    ROS_INFO("neighbor COST: %f ms",
+//                             find_neighborcost);
+//                    ROS_INFO("compute COST: %f ms",
+//                             solve_cost);
+////                    ROS_INFO("problem make COST: %f ms",
+////                             std::chrono::duration<double, std::milli>(findNeighbor_end - findNeighbor_start).count());
+////                    ROS_INFO("OPT_NUM:%d",opt_num);
+//        }
 
         //judge keyframe
         //last_pose = curr_frame.pose;
@@ -585,7 +671,7 @@ public:
 
 
         auto init_begin= std::chrono::steady_clock::now();
-        Sophus::SE3d begin_pose = globalTraj.getLastPose();
+        Sophus::SE3d begin_pose = globalTraj.predict(timeSegBegin);
         Sophus::SE3d end_pose = globalTraj.predict(timeSegEnd);
         Sophus::SE3d T_pred = end_pose;
 //        if(!isMove){
@@ -727,6 +813,7 @@ public:
                 //ROS_INFO("1");
 
                 //evaluate dir
+                ENVAnalyse(points_vec);
                 PCAAnalyse();
                 frame_info curr_frame;
                 curr_frame.setFrameTime(headertime,timeStart, timeEnd,frame_count);
@@ -759,42 +846,14 @@ public:
                 //return;
             }
 
-
-            auto evaluate = std::chrono::steady_clock::now();
-            int sample =0;
-            average_dis = 0;
-            int count=0;
-            for(auto & point :points_vec){
-                average_dis += point.distance;
-                sample++;
-            }
-            auto  evaluatea_end = std::chrono::steady_clock::now();
-            average_dis = average_dis/sample;
-            ROS_INFO("DISTANCE: %f", average_dis);//<5 0.2  <10 0.4 >10 ada
-
-            if(average_dis<5.0){
-                envtype = ENVTYPE::NARROW;
-                keyframe_valid = true;
-                seg_frame = false;
-            }else if(average_dis < 8.0){
-                envtype = ENVTYPE::INDOOR;
-                keyframe_valid = false;
-                seg_frame = true;
-            } else if(average_dis <15.0){
-                envtype = ENVTYPE::OUTDOOR;
-                keyframe_valid = false;
-                seg_frame = true;
-            } else{
-                envtype = ENVTYPE::OPEN;
-                keyframe_valid = false;
-                seg_frame = true;
-
-            }
-
-
+            keyframe_valid = false;
+            ENVAnalyse(points_vec);
             int motion_evaluate =0;
-            //int seg_num = seg_frame?PCAAnalyse():1;
-            int seg_num = 1;
+
+            int seg_num = PCAAnalyse();
+            seg_num = seg_frame?seg_num:1;
+
+            //int seg_num = 2;
             double seg_length = (timeEnd - timeStart)/((double)seg_num);
             double seg_start = timeStart;
             double seg_end  = timeStart;

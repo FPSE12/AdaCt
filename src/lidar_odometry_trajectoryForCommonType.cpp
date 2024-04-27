@@ -79,6 +79,8 @@ public:
     Trajectory globalTraj;
 
 
+    double average_dis=0.0;
+
     int iter_nums; // 5
 
     //time cost ms
@@ -172,7 +174,7 @@ public:
 
     //point2point
     //source_cloud is all last_frame in world axis
-    void SCAN2SCAN(vector<PointType>& targetCloud, vector<PointType > &sourceCloud, OptPose &curr_pose_){
+    void SCAN2SCAN(vector<PointType>& targetCloud, vector<PointType > &sourceCloud, OptPose &curr_pose_, int seg_num){
 
 //        std::cout<<curr_pose_.end_pose.translation()<<std::endl;
         //time cost??
@@ -202,7 +204,7 @@ public:
             problem.AddParameterBlock(begin_trans_.data(), 3);
             problem.AddParameterBlock(end_trans_.data(), 3);
             int valid_num=0;
-            for(auto  t_point : targetCloud){
+            for(auto  &t_point : targetCloud){
 
                 t_point.point_world = curr_pose_.linearInplote(t_point.alpha)* t_point.point;
 
@@ -239,6 +241,9 @@ public:
                 }
 
             }
+
+
+
 
 //            ROS_INFO("valid: %d",valid_num);
             ceres::Solver::Options option;
@@ -294,7 +299,24 @@ public:
 
         //下采样会导致问题
 //        curr_frame.grid_sample_mid_in_pcl(DOWNSAMPLE_VOXEL_SIZE);
-        curr_frame.Adaptive_sample_mid_in_vec();
+        switch (envtype) {
+            case ENVTYPE::NARROW:
+                curr_frame.Adaptive_sample_mid_in_vec_NARROW(average_dis);
+                break;
+            case ENVTYPE::INDOOR:
+                curr_frame.Adaptive_sample_mid_in_vec_INDOOR(average_dis);
+                break;
+            case ENVTYPE::OUTDOOR:
+                curr_frame.Adaptive_sample_mid_in_vec(average_dis);
+                break;
+            case ENVTYPE::OPEN:
+                curr_frame.Adaptive_sample_mid_in_vec_OPEN(average_dis);
+                break;
+            default:
+                curr_frame.Adaptive_sample_mid_in_vec_OPEN(average_dis);
+                break;
+
+        }
 
         //if seg the cloud scan2scan: use the last full cloud
 //        auto scan2scan_start = std::chrono::steady_clock::now();
@@ -330,7 +352,7 @@ public:
                     if(search != local_map.map.end()){
                         auto & voxel_block = search.value();
 
-                        for(auto  point : voxel_block){
+                        for(auto  &point : voxel_block){
                             Eigen::Vector3d neighbor=point.point_world;
 
                             double dis=(neighbor[0]-PointW[0])*(neighbor[0]-PointW[0])+(neighbor[1]-PointW[1])*(neighbor[1]-PointW[1])
@@ -429,13 +451,15 @@ public:
         //return isValid;
     }
 
-    void Solve(frame_info & curr_frame, int & motion_evaluate){
+    void Solve(frame_info & curr_frame, int & motion_evaluate, int seg_num){
 //            ---------------------------------- solve--------------------------------------------------
         int iter_count = 0;
         double solve_cost=0;
 //            vector<double> loss={0.2,0.2,0.2,0.2,0.2};
         double find_neighborcost=0;
         double compouteDisatribute=0;
+
+
 
         for (; iter_count < iter_nums; iter_count++) {
 
@@ -462,7 +486,10 @@ public:
             auto findNeighbor_start = std::chrono::steady_clock::now();
 
             cloud_valid->clear();
-//#pragma omp parallel for num_threads(8)
+
+            vector<ceres::CostFunction *> cost_factors(curr_frame.points.size());
+            int point_index=-1;
+#pragma omp parallel for num_threads(8) private(point_index)
             for (auto  & p : curr_frame.points) {
 
                 std::vector<Eigen::Vector3d> neighbor;
@@ -506,19 +533,32 @@ public:
                     ceres::CostFunction *cost_function = new ceres::AutoDiffCostFunction<CTFunctor2, 1, 4, 4, 3, 3>(
                             new CTFunctor2(p.alpha, p.point, neighbor.back(), weight,normal));
 
-                    problem.AddResidualBlock(cost_function,
-                                             loss_function,
-                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+//                    problem.AddResidualBlock(cost_function,
+//                                             loss_function,
+//                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+                    point_index++;
+                    cost_factors[point_index] = cost_function;
 
                     PointXYZIRT point;
                     point.x = p.point[0];
                     point.y = p.point[1];
                     point.z = p.point[2];
-                    cloud_valid->emplace_back(point);
+                    //cloud_valid->emplace_back(point);
                 }
             }
-            publishCloud(cloud_valid_pub,cloud_valid,curr_frame.headertime,"odometry");//1ms
+
+
+
+
+//            publishCloud(cloud_valid_pub,cloud_valid,curr_frame.headertime,"odometry");//1ms
 //
+            for(auto &cost_factor : cost_factors ){
+                if(cost_factor)
+                     problem.AddResidualBlock(cost_factor,
+                                             loss_function,
+                                             begin_quat.coeffs().data(),end_quat.coeffs().data(), begin_trans.data(), end_trans.data());
+            }
+            //vector<ceres::CostFunction*>().swap(cost_factors);
 //            publishCloud(cloud_downsample_pub,curr_frame.cloud_ori_downsample,ros::Time(headertime),"odometry");
             auto findNeighbor_end = std::chrono::steady_clock::now();
 
@@ -527,7 +567,7 @@ public:
 
             //add other constraints
             problem.AddResidualBlock(new ceres::AutoDiffCostFunction<LocationConsistency,6,4,3>(
-                                             new LocationConsistency(last_pose.endQuat(), last_pose.endTrans(), std::sqrt(opt_num * 0.01))),
+                                             new LocationConsistency(last_pose.endQuat(), last_pose.endTrans(), std::sqrt(opt_num * 0.01*seg_num))),
                                      nullptr,
                                      begin_quat.coeffs().data(),begin_trans.data()
 
@@ -539,7 +579,7 @@ public:
             Eigen::Vector3d pre_trans_delta = last_pose.endTrans() - last_pose.beginTrans();//in world axis
 
             problem.AddResidualBlock(new ceres::AutoDiffCostFunction<ConstantVelocityRotTran,6,4,4,3,3>(
-                                             new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.001))),
+                                             new ConstantVelocityRotTran(pre_quat_delta,pre_trans_delta,std::sqrt(opt_num*0.01*seg_num))),
                                      nullptr,
                                      begin_quat.coeffs().data(),end_quat.coeffs().data(),begin_trans.data(),end_trans.data()
             );
@@ -549,7 +589,7 @@ public:
             ceres::Solver::Options option;
             option.linear_solver_type = ceres::DENSE_QR;
             option.max_num_iterations =6;
-            option.num_threads = 16;
+            option.num_threads = 4;
             option.trust_region_strategy_type = ceres::TrustRegionStrategyType::LEVENBERG_MARQUARDT;
 
             ceres::Solver::Summary summary;
@@ -591,7 +631,7 @@ public:
     void ProcessSeg( std::vector<PointType> & points_vec, double timeStart, double timeEnd,
                      double  timeSegBegin, double timeSegEnd, double headertime,
                      int frame_id, int & motion_evaluate,
-                     std::vector<PointType> & points_vec_process){
+                     std::vector<PointType> & points_vec_process, int seg_num){
 
         auto procee_begin = std::chrono::steady_clock::now();
 
@@ -610,7 +650,7 @@ public:
         auto init_end = std::chrono::steady_clock::now();
 
         auto solve_begin = std::chrono::steady_clock::now();
-        Solve(curr_frame, motion_evaluate);
+        Solve(curr_frame, motion_evaluate, seg_num);
         auto solve_end = std::chrono::steady_clock::now();
 
         auto update_begin = std::chrono::steady_clock::now();
@@ -665,12 +705,16 @@ public:
             voxel_map.updateVoxelMap(points_vec_process);
 
             key_poses.push_back(last_pose);
-            globalMap->clear();
-            //getVoxelMap(voxel_map, globalMap);
-            voxel_map.getGlobalMap(globalMap);
-            //ROS_INFO("GLOBAL_MAP SIZE : %d,",globalMap->size());
-            //pub map
-            publishCloud(map_pub,globalMap,header_stamp,"map");
+
+            if(map_pub.getNumSubscribers()){
+                globalMap->clear();
+                //getVoxelMap(voxel_map, globalMap);
+                voxel_map.getGlobalMap(globalMap);
+                //ROS_INFO("GLOBAL_MAP SIZE : %d,",globalMap->size());
+                //pub map
+                publishCloud(map_pub,globalMap,header_stamp,"map");
+            }
+
 
         }
         auto map_end = std::chrono::steady_clock::now();
@@ -698,12 +742,7 @@ public:
             frame_count++;
             ROS_INFO("------------------------------frame_id:%d----------------------------",frame_count);
 
-            // get pcl cloud
 
-            mtx_get.lock();
-            sensor_msgs::PointCloud2 cloud_ori_ros = std::move(rosCloudQue.front());
-            rosCloudQue.pop_front();
-            mtx_get.unlock();
             //pcl::PointCloud<PointXYZIRT>::Ptr cloud_ori(new pcl::PointCloud<PointXYZIRT>());
             cloud_ori->clear();
             std::vector<PointType> points_vec;
@@ -711,13 +750,19 @@ public:
 
 
             // get timestamp
-            double headertime = cloud_ori_ros.header.stamp.toSec();
+            double headertime = 0.0;
             double timeStart = 0.0;
             double timeEnd = 0.0;
 
 //            pcl::moveFromROSMsg(cloud_ori_ros, *cloud_ori);
 //            preprocess(cloud_ori, points_vec,headertime,timeStart, timeEnd);
 
+            mtx_get.lock();
+            sensor_msgs::PointCloud2 cloud_ori_ros = std::move(rosCloudQue.front());
+            rosCloudQue.pop_front();
+            cloud_ori->clear();
+            pcl::fromROSMsg(cloud_ori_ros,*cloud_ori);
+            mtx_get.unlock();
             CLOUD_CONVERT cc(cloud_ori_ros,(LidarType)lidar_type, points_vec,headertime,timeStart,timeEnd);
 
 
@@ -760,7 +805,50 @@ public:
                 //return;
             }
 
+
+            auto evaluate = std::chrono::steady_clock::now();
+            int sample =0;
+            average_dis = 0;
+            int count=0;
+            for(auto & point :points_vec){
+                average_dis += point.distance;
+                sample++;
+            }
+            auto  evaluatea_end = std::chrono::steady_clock::now();
+            average_dis = average_dis/sample;
+            ROS_INFO("DISTANCE: %f", average_dis);//<5 0.2  <10 0.4 >10 ada
+
+            if(average_dis<5.0){
+                envtype = ENVTYPE::NARROW;
+                keyframe_valid = true;
+                seg_frame = false;
+            }else if(average_dis < 8.0){
+                envtype = ENVTYPE::INDOOR;
+                keyframe_valid = false;
+                seg_frame = true;
+            } else if(average_dis <15.0){
+                envtype = ENVTYPE::OUTDOOR;
+                keyframe_valid = false;
+                seg_frame = true;
+            } else{
+                envtype = ENVTYPE::OPEN;
+                keyframe_valid = false;
+                seg_frame = true;
+
+            }
             int motion_evaluate =0;
+
+            int seg_num = 1;
+            double seg_length = (timeEnd - timeStart)/((double)seg_num);
+            double seg_start = timeStart;
+            double seg_end  = timeStart;
+            for(int seg_index=0;seg_index<seg_num;seg_index++){
+                seg_start = seg_end;
+                seg_end = min(seg_start + seg_length, timeEnd);
+                ProcessSeg(points_vec,timeStart, timeEnd, seg_start, seg_end, headertime,
+                           frame_count, motion_evaluate, points_vec_process,seg_num);
+            }
+
 
             double timeMid = (timeStart  + timeEnd)/(2.0);
             ROS_INFO("frame time: %f, %f, %f", timeStart, timeMid, timeEnd);
@@ -768,21 +856,13 @@ public:
 
 //            ProcessSeg(points_vec,timeStart, timeEnd, timeStart, timeEnd, headertime, frame_count, motion_evaluate, points_vec_process);
 
-            ProcessSeg(points_vec,timeStart, timeEnd, timeStart, timeMid, headertime,frame_count, motion_evaluate, points_vec_process);
-            ProcessSeg(points_vec,timeStart, timeEnd, timeMid, timeEnd, headertime, frame_count, motion_evaluate, points_vec_process);
+
 
             AddCloudToMap(motion_evaluate, points_vec_process, headertime);
 
             //publish ori_cloud, world_cloud
             publish(points_vec_process,headertime);
 
-//            double timeMid_1 = (timeStart * 2.0 + timeEnd)/(3.0);
-//            double timeMid_2 = (timeStart + 2.0 * timeEnd)/(3.0);
-//            ROS_INFO("frame time: %f, %f, %f", timeStart, timeMid_1, timeEnd);
-//            // init frame_info
-//            ProcessSeg(cloud_ori, timeStart, timeMid_1, headertime);
-//            ProcessSeg(cloud_ori, timeMid_1, timeMid_2, headertime);
-//            ProcessSeg(cloud_ori, timeMid_2, timeEnd, headertime);
 
             std::vector<PointType>().swap(points_vec);
             std::vector<PointType>().swap(points_vec_process);

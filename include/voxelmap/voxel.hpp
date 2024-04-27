@@ -32,7 +32,7 @@ struct Voxel{
     }
 
 
-    static Voxel Coordinates(const Eigen::Vector3d point,double voxel_size){
+    static Voxel Coordinates(const Eigen::Vector3d &point,double voxel_size){
         Voxel voxel;
         voxel.x=int(point(0)/voxel_size);
         if(voxel.x<0) voxel.x--;

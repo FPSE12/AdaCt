@@ -345,8 +345,9 @@ public:
             //leaves_[leafnum]->new_points_num_++;
         }
 
-        std::vector<PointType>().swap(all_points_);//if cut clear all_points because in subvoxel
-        //all_points_.clear();
+        //std::vector<PointType>().swap(all_points_);//if cut clear all_points because in subvoxel
+
+        all_points_.clear();
         for (uint i = 0; i < 8; i++) {//继续对子voxel判断是否拟合
             if (leaves_[i] != nullptr) {
                 if (leaves_[i]->all_points_.size() >
@@ -389,7 +390,11 @@ public:
                     }
                     if (new_points_num_ > update_size_threshold_) {//每增加一定的点，就继续更新平面
                         if (update_cov_enable_) {
-                            init_plane(all_points_, plane_ptr_);//重新计算
+                            //init_plane(all_points_, plane_ptr_);//重新计算
+                            update_plane(all_points_,plane_ptr_);
+                            if(!plane_ptr_->is_plane){//加入新的点之后不是平面了
+                                cut_octo_tree();
+                            }
                         }
                         new_points_num_ = 0;//new point 置0
                         new_points_.clear();
@@ -453,12 +458,13 @@ public:
                             new_points_.push_back(pv);//点已经有很多了，就用新的点拟合平面
                         }
                         if (new_points_num_ > update_size_threshold_) {
-                            if (update_cov_enable_) {
-                                init_plane(all_points_, plane_ptr_);
-                            } else {
-                                update_plane(new_points_, plane_ptr_);
-                                new_points_.clear();
-                            }
+//                            if (update_cov_enable_) {
+//                                init_plane(all_points_, plane_ptr_);
+//                            } else {
+//                                update_plane(new_points_, plane_ptr_);
+//                                new_points_.clear();
+//                            }
+                            update_plane(all_points_,plane_ptr_);
                             new_points_num_ = 0;
                         }
                         if (all_points_num_ >= max_cov_points_size_) {
@@ -478,7 +484,7 @@ public:
 
     void GetPclCloud(pcl::PointCloud<PointXYZIRT>::Ptr PclCloud){
         if(all_points_.empty()){
-            for(auto leave : leaves_){
+            for(auto &leave : leaves_){
                 if(leave!= nullptr){
                     leave->GetPclCloud(PclCloud);
                 }
@@ -550,7 +556,7 @@ void updateVoxelMap(const std::vector<PointType> &input_points,
                     const float planer_threshold,
                     tsl::robin_map<Voxel, OctoTree *> &feat_map) {
     uint plsize = input_points.size();
-
+//#pragma omp parallel for
     for(auto & p_v : input_points){
         float loc_xyz[3];
         for (int j = 0; j < 3; j++) {

@@ -33,13 +33,46 @@ public:
                 continue;
             }
             double dis =sqrt(point_pcl.x * point_pcl.x + point_pcl.y * point_pcl.y + point_pcl.z * point_pcl.z);
-            if(dis<blind ){
+            if(dis<blind || dis>max_range){
                 continue;
             }
 
             PointType p;
             p.point<<point_pcl.x, point_pcl.y, point_pcl.z;
             p.timestamp = point_pcl.timestamp;
+            p.intensity = point_pcl.intensity;
+            p.distance = dis;
+            points_vec.emplace_back(p);
+        }
+        //do not calculate the alpha!
+        sort(points_vec.begin(), points_vec.end(), timelistvec);
+        timeStart = points_vec[0].timestamp;
+        timeEnd = points_vec.back().timestamp;
+
+        subSampleFrame(points_vec,0.05);
+    }
+
+
+    void OUST64Handler(sensor_msgs::PointCloud2 & rosMsg,
+                          std::vector<PointType> & points_vec,
+                          double & headertime, double & timeStart, double & timeEnd){
+
+        headertime = rosMsg.header.stamp.toSec();
+        pcl::PointCloud<PointOust64> pcl_cloud;
+        pcl::moveFromROSMsg(rosMsg, pcl_cloud);
+
+        for(auto & point_pcl: pcl_cloud.points){
+            if(!std::isfinite(point_pcl.x)|| !std::isfinite(point_pcl.y) || !std::isfinite(point_pcl.z) ){
+                continue;
+            }
+            double dis =sqrt(point_pcl.x * point_pcl.x + point_pcl.y * point_pcl.y + point_pcl.z * point_pcl.z);
+            if(dis<blind || dis>max_range){
+                continue;
+            }
+
+            PointType p;
+            p.point<<point_pcl.x, point_pcl.y, point_pcl.z;
+            p.timestamp = (double)point_pcl.t/(1e9) + headertime;
             p.intensity = point_pcl.intensity;
             p.distance = dis;
             points_vec.emplace_back(p);
@@ -65,7 +98,7 @@ public:
                 continue;
             }
             double dis =sqrt(point_pcl.x * point_pcl.x + point_pcl.y * point_pcl.y + point_pcl.z * point_pcl.z);
-            if(dis<blind ){
+            if(dis<blind || dis>max_range){
                 continue;
             }
 
@@ -81,7 +114,7 @@ public:
         timeStart = points_vec[0].timestamp;
         timeEnd = points_vec.back().timestamp;
 
-        subSampleFrame(points_vec,0.05);
+        subSampleFrame(points_vec,0.05);//7-8ms
     }
 
     void HeSaiHandler(sensor_msgs::PointCloud2 & rosMsg,
@@ -96,7 +129,7 @@ public:
                 continue;
             }
             double dis =sqrt(point_pcl.x * point_pcl.x + point_pcl.y * point_pcl.y + point_pcl.z * point_pcl.z);
-            if(dis<blind ){
+            if(dis<blind ||dis>max_range){
                 continue;
             }
 
@@ -131,7 +164,7 @@ public:
             }
 
             double dis = sqrt(p.x * p.x + p.y *p.y +p.z * p.z);
-            if(dis< blind ){
+            if(dis< blind ||dis>max_range){
                 continue;
             }
 
@@ -172,6 +205,9 @@ public:
                 break;
             case LidarType::LIVOX:
                 LivoxHandler(rosMsg,points_vec,headertime,timeStart,timeEnd);
+                break;
+            case LidarType::OUST64:
+                OUST64Handler(rosMsg,points_vec,headertime,timeStart,timeEnd);
                 break;
             default:
                 ROS_ERROR("Wrong Lidar Type");
