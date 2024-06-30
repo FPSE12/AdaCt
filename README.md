@@ -1,38 +1,19 @@
 # AdaCt
-lidar_odometry: ikdtree_for map manager 
+We propose a straightforward and efficient continuous-time LiDAR odometry method based on linear interpolation, which can flexibly adjust the temporal intervals between control nodes according to the dynamics of motion and environmental degradation. The method reduces temporal interval through PCA(Principal Component Analysis) to judge the dynamics of motion, while increasing temporal interval during the optimization process to address degeneracy issues which caused by segmentation of LiDAR scans. For the map management, we use the multi-resolution voxelmap to get different scale plane features. 
 
-lidar_odometry_downsample: downsample the oricloud
+# Dataset   Evalution
 
-lidar_odometry_new: ikdtree use like fastlio2
+## NTU VIRAL DATASET
+<img src="image/ntu.png" width="100%" height="auto">
 
-
-##record
-
-featureMap better than  featureMapNew
-
-
-## note
-use the c++ 03  opt the computation
-
-downsample: map->big(to find more points), curr->frame->big
+## M2DGR DATASET
+<img src="image/m2dgr.png" width="100%" height="auto">
 
 
-a2d:
-indoor ave: 0.4-0.45: people  0.3-0.4
-55lou ave:  indoor 0.45-0.6
-
-outdoor sipailou: 0.4 -0.52
-
-forest: downsample most is ground, 树干上的点大多邻居不够
-
-multiNode&&resolution: always update, liwenzhenghuan is also wrong
-                        but indoor is better than keypose_update
-
-2-1:
-multiresolution :  better than else;
-mutlmode : can work
 
 
-three node : 体素地图效果好一点，多分辨率实时性更高效果差一点（人的影响）
+# Thanks
+ Thanks [ct-icp](https://github.com/jedeschaud/ct_icp) and [voxel_map](https://github.com/hku-mars/VoxelMap).
+
 
 
